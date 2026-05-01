@@ -13,6 +13,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,9 +24,16 @@ export default function RegisterPage() {
     }
     try {
       await register(email, password, fullName);
-      router.push("/");
+      setSuccess(true);
+      setTimeout(() => router.push("/"), 1500);
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Registration failed. Email may already be in use.");
+      if (err?.response?.data?.detail) {
+        setError(err.response.data.detail);
+      } else if (err?.code === "ERR_NETWORK" || err?.code === "ECONNREFUSED" || !err?.response) {
+        setError("Cannot connect to server. Make sure the backend is running.");
+      } else {
+        setError("Registration failed. Please try again.");
+      }
     }
   }
 
@@ -45,6 +53,12 @@ export default function RegisterPage() {
           <h1 className="font-display font-bold text-xl text-text-primary mb-6 uppercase tracking-wider">
             Register
           </h1>
+
+          {success && (
+            <div className="mb-4 p-3 border border-accent-green/40 bg-accent-green/10 font-mono text-xs text-accent-green">
+              ✓ Account created! Redirecting...
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 border border-accent-red/40 bg-accent-red/10 font-mono text-xs text-accent-red">

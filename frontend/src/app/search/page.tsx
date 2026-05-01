@@ -14,7 +14,7 @@ function SearchContent() {
   const { properties, isLoading } = useSearch(query);
 
   return (
-    <div className="h-[calc(100vh-3.5rem)] flex flex-col">
+    <div className="mt-14 h-[calc(100vh-3.5rem)] flex flex-col">
       {/* Top search bar */}
       <div className="h-14 border-b border-border-subtle bg-bg-secondary flex items-center px-4 gap-4">
         <SearchBar initialValue={query} compact />

@@ -1,12 +1,27 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Search, Bell, User, Map } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Search, Bell, User, Map, LogOut } from "lucide-react";
 import { clsx } from "clsx";
+import { useAuthStore } from "@/lib/store/authStore";
 
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, isAuthenticated, loadUser, logout } = useAuthStore();
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("access_token")) {
+      loadUser();
+    }
+  }, []);
+
+  async function handleLogout() {
+    await logout();
+    router.push("/");
+  }
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 h-14 bg-bg-secondary/90 backdrop-blur-sm border-b border-border-subtle">
@@ -43,14 +58,31 @@ export function Navbar() {
           <button className="p-2 text-text-muted hover:text-text-secondary transition-colors">
             <Bell className="w-4 h-4" />
           </button>
-          <Link
-            href="/auth/login"
-            className="flex items-center gap-2 px-4 py-1.5 border border-border-subtle
-              text-text-secondary hover:border-accent-green/50 hover:text-accent-green
-              transition-colors duration-200 font-mono text-xs uppercase tracking-wider"
-          >
-            <User className="w-3.5 h-3.5" /> Sign In
-          </Link>
+
+          {isAuthenticated && user ? (
+            <div className="flex items-center gap-3">
+              <span className="hidden sm:block font-mono text-xs text-accent-green border border-accent-green/30 px-2 py-1">
+                {user.full_name.split(" ")[0].toUpperCase()}
+              </span>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-1.5 border border-border-subtle
+                  text-text-secondary hover:border-accent-red/50 hover:text-accent-red
+                  transition-colors duration-200 font-mono text-xs uppercase tracking-wider"
+              >
+                <LogOut className="w-3.5 h-3.5" /> Sign Out
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/auth/login"
+              className="flex items-center gap-2 px-4 py-1.5 border border-border-subtle
+                text-text-secondary hover:border-accent-green/50 hover:text-accent-green
+                transition-colors duration-200 font-mono text-xs uppercase tracking-wider"
+            >
+              <User className="w-3.5 h-3.5" /> Sign In
+            </Link>
+          )}
         </div>
       </div>
     </nav>

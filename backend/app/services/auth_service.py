@@ -26,7 +26,8 @@ class AuthService:
             full_name=data.full_name,
         )
         self.db.add(user)
-        await self.db.flush()
+        await self.db.commit()
+        await self.db.refresh(user)
 
         return self._create_tokens(user)
 
