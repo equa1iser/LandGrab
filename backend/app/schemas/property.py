@@ -85,8 +85,8 @@ class PropertyBase(BaseModel):
     state: str
     zip_code: str
     county: Optional[str] = None
-    lat: Optional[Decimal] = None
-    lng: Optional[Decimal] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
     beds: Optional[int] = None
     baths: Optional[Decimal] = None
     sqft: Optional[int] = None

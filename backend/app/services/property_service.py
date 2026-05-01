@@ -166,5 +166,6 @@ class PropertyService:
                 setattr(prop, field, data[field])
 
         prop.last_synced_at = datetime.utcnow()
-        await self.db.flush()
+        await self.db.commit()
+        await self.db.refresh(prop)
         return prop
