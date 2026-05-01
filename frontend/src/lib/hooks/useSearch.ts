@@ -30,5 +30,5 @@ export function useSearch(query: string) {
     staleTime: 2 * 60 * 1000,
   });
 
-  return { properties: (data as unknown[]) || [], isLoading, error };
+  return { properties: (data as any[]) || [], isLoading, error };
 }

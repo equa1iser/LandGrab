@@ -1,5 +1,6 @@
 "use client";
 
+import "mapbox-gl/dist/mapbox-gl.css";
 import { useRef, useEffect, useState } from "react";
 
 interface Property {
@@ -21,7 +22,7 @@ interface PropertyMapProps {
 }
 
 function scoreToColor(score?: number): string {
-  if (!score) return "#9ca3af";
+  if (!score) return "#00d4ff";
   if (score >= 75) return "#00ff41";
   if (score >= 50) return "#f59e0b";
   return "#ef4444";
@@ -76,9 +77,11 @@ export function PropertyMap({ properties, onPropertySelect }: PropertyMapProps) 
 
   // Update markers when properties change
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !mapReady) return;
 
     import("mapbox-gl").then((mapboxgl) => {
+      if (!mapRef.current) return;
+
       // Clear existing markers
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
@@ -128,7 +131,7 @@ export function PropertyMap({ properties, onPropertySelect }: PropertyMapProps) 
         const marker = new mapboxgl.default.Marker(el)
           .setLngLat([prop.lng!, prop.lat!])
           .setPopup(popup)
-          .addTo(mapRef.current);
+          .addTo(mapRef.current!);
 
         el.addEventListener("click", () => {
           onPropertySelect?.(prop.id);
@@ -188,6 +191,7 @@ export function PropertyMap({ properties, onPropertySelect }: PropertyMapProps) 
           { color: "#00ff41", label: "75+ · Strong" },
           { color: "#f59e0b", label: "50-74 · Moderate" },
           { color: "#ef4444", label: "< 50 · Weak" },
+          { color: "#00d4ff", label: "No score yet" },
         ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-2">
             <div
