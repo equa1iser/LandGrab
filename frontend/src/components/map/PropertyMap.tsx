@@ -33,6 +33,7 @@ export function PropertyMap({ properties, onPropertySelect }: PropertyMapProps) 
   const markersRef = useRef<any[]>([]);
   const [mapToken, setMapToken] = useState<string | null>(null);
   const [mapError, setMapError] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -63,11 +64,13 @@ export function PropertyMap({ properties, onPropertySelect }: PropertyMapProps) 
       );
 
       mapRef.current = map;
+      map.on("load", () => setMapReady(true));
     });
 
     return () => {
       mapRef.current?.remove();
       mapRef.current = null;
+      setMapReady(false);
     };
   }, [mapToken]);
 
@@ -151,7 +154,7 @@ export function PropertyMap({ properties, onPropertySelect }: PropertyMapProps) 
         });
       }
     });
-  }, [properties, onPropertySelect]);
+  }, [properties, onPropertySelect, mapReady]);
 
   if (mapError) {
     return (

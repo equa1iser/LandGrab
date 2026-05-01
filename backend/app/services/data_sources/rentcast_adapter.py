@@ -99,6 +99,30 @@ class RentCastAdapter(BaseDataSource):
     async def get_price_history(self, property_external_id: str) -> list[dict]:
         return []
 
+    def _normalize_listing(self, data: dict) -> dict:
+        """Normalize a /listings/sale response (includes asking price)."""
+        raw_address = data.get("formattedAddress", "")
+        address_line1 = data.get("addressLine1") or (raw_address.split(",")[0].strip() if raw_address else "")
+        return {
+            "external_id": data.get("id"),
+            "source": self.source_name,
+            "address_line1": address_line1,
+            "city": data.get("city", ""),
+            "state": data.get("state", ""),
+            "zip_code": data.get("zipCode", ""),
+            "county": data.get("county"),
+            "lat": data.get("latitude"),
+            "lng": data.get("longitude"),
+            "beds": data.get("bedrooms"),
+            "baths": data.get("bathrooms"),
+            "sqft": data.get("squareFootage"),
+            "year_built": data.get("yearBuilt"),
+            "property_type": self._map_type(data.get("propertyType")),
+            "current_price": data.get("price"),
+            "days_on_market": data.get("daysOnMarket"),
+            "raw_data": data,
+        }
+
     async def search_properties(
         self,
         city=None, state=None, zip_code=None,
@@ -110,7 +134,7 @@ class RentCastAdapter(BaseDataSource):
             return []
 
         await self._check_quota()
-        params = {"limit": min(limit, 50)}
+        params = {"limit": min(limit, 50), "status": "Active"}
         if zip_code:
             params["zipCode"] = zip_code
         if city:
@@ -126,9 +150,17 @@ class RentCastAdapter(BaseDataSource):
 
         async with create_client(RENTCAST_BASE, headers={"X-Api-Key": settings.RENTCAST_API_KEY}) as client:
             try:
-                resp = await client.get("/properties", params=params)
+                # /listings/sale returns active listings with asking prices
+                resp = await client.get("/listings/sale", params=params)
                 resp.raise_for_status()
                 await self._increment_quota()
-                return [self._normalize(p) for p in resp.json()]
+                return [self._normalize_listing(p) for p in resp.json()]
             except Exception:
-                return []
+                # Fall back to property records (no prices, but still useful for the map)
+                try:
+                    params.pop("status", None)
+                    resp = await client.get("/properties", params=params)
+                    resp.raise_for_status()
+                    return [self._normalize(p) for p in resp.json()]
+                except Exception:
+                    return []

@@ -88,12 +88,12 @@ class PropertyBase(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     beds: Optional[int] = None
-    baths: Optional[Decimal] = None
+    baths: Optional[float] = None
     sqft: Optional[int] = None
-    lot_size_acres: Optional[Decimal] = None
+    lot_size_acres: Optional[float] = None
     year_built: Optional[int] = None
     property_type: Optional[str] = None
-    current_price: Optional[Decimal] = None
+    current_price: Optional[float] = None
     list_date: Optional[date] = None
     days_on_market: Optional[int] = None
     photo_urls: Optional[list] = None

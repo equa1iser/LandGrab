@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.models.property import Property, PriceHistory, TaxHistory
 from app.schemas.property import PropertyDetailResponse, PropertySummaryResponse, PropertyBase
@@ -101,7 +102,14 @@ class PropertyService:
     async def _get_by_id(self, property_id: str) -> Optional[Property]:
         try:
             uid = uuid.UUID(property_id)
-            result = await self.db.execute(select(Property).where(Property.id == uid))
+            result = await self.db.execute(
+                select(Property)
+                .options(
+                    selectinload(Property.price_history),
+                    selectinload(Property.tax_history),
+                )
+                .where(Property.id == uid)
+            )
             return result.scalar_one_or_none()
         except (ValueError, Exception):
             return None
