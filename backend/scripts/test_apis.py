@@ -41,9 +41,9 @@ def section(title: str):
 # ── RentCast ─────────────────────────────────────────────────────────────────
 
 async def test_rentcast():
-    section("RentCast  (property listings)")
+    section("RentCast  (property listings + market stats)")
     if not settings.RENTCAST_API_KEY:
-        skip("listings/sale"); skip("properties fallback"); return
+        skip("listings/sale"); skip("properties fallback"); skip("statistics/sale"); return
 
     headers = {"X-Api-Key": settings.RENTCAST_API_KEY}
     async with httpx.AsyncClient(base_url="https://api.rentcast.io/v1",
@@ -70,6 +70,19 @@ async def test_rentcast():
                 fail("properties (fallback)", f"HTTP {r2.status_code}")
         except Exception as e:
             fail("properties (fallback)", str(e))
+
+        try:
+            r3 = await client.get("/markets", params={"zipCode": "78701"})
+            if r3.status_code == 200:
+                sale = r3.json().get("saleData", {})
+                median = sale.get("medianPrice")
+                dom = sale.get("medianDaysOnMarket")
+                ok("markets (ZIP stats)",
+                   f"median=${median:,}, DOM={dom}d" if median else f"keys: {list(sale.keys())[:6]}")
+            else:
+                fail("markets (ZIP stats)", f"HTTP {r3.status_code}: {r3.text[:120]}")
+        except Exception as e:
+            fail("markets (ZIP stats)", str(e))
 
 
 # ── FRED ─────────────────────────────────────────────────────────────────────

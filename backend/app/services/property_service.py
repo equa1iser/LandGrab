@@ -6,11 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.models.property import Property, PriceHistory, TaxHistory
+from app.models.property import Property, PriceHistory, TaxHistory, PriceEventType
 from app.schemas.property import PropertyDetailResponse, PropertySummaryResponse, PropertyBase
 from app.services.data_sources.registry import get_registry
 from app.services.neighborhood_service import NeighborhoodService
 from app.services.market_service import MarketService
+
+
+async def _noop():
+    return []
 
 
 class PropertyService:
@@ -25,12 +29,27 @@ class PropertyService:
         if not prop:
             return None
 
-        # Fetch supplemental data in parallel
-        neighborhood, market = await asyncio.gather(
+        # Fetch price/tax history from external source if not yet in DB
+        needs_price = not prop.price_history and bool(prop.external_id)
+        needs_tax = not prop.tax_history and bool(prop.external_id)
+
+        neighborhood, market, raw_price, raw_tax = await asyncio.gather(
             self.neighborhood_service.get_or_fetch(prop.zip_code, prop.city, prop.state),
-            self.market_service.get_or_fetch(prop.zip_code),
+            self.market_service.get_or_fetch(prop.zip_code, prop.city, prop.state),
+            self.registry.get_price_history(prop.external_id, prop.source) if needs_price else _noop(),
+            self.registry.get_tax_history(prop.external_id, prop.source) if needs_tax else _noop(),
             return_exceptions=True,
         )
+
+        price_events = raw_price if needs_price and not isinstance(raw_price, Exception) else []
+        tax_events = raw_tax if needs_tax and not isinstance(raw_tax, Exception) else []
+
+        if price_events:
+            await self._persist_price_history(prop, price_events)
+        if tax_events:
+            await self._persist_tax_history(prop, tax_events)
+        if price_events or tax_events:
+            prop = await self._get_by_id(property_id)
 
         from app.schemas.property import NeighborhoodSummary, MarketSummary
         n_data = None
@@ -49,6 +68,46 @@ class PropertyService:
             neighborhood=n_data,
             market=m_data,
         )
+
+    async def _persist_price_history(self, prop: Property, events: list[dict]) -> None:
+        for ev in events:
+            price = ev.get("price")
+            raw_date = ev.get("event_date")
+            if not price or not raw_date:
+                continue
+            try:
+                if isinstance(raw_date, str):
+                    event_date = datetime.strptime(raw_date[:10], "%Y-%m-%d").date()
+                else:
+                    event_date = raw_date
+            except (ValueError, TypeError):
+                continue
+            self.db.add(PriceHistory(
+                property_id=prop.id,
+                event_type=PriceEventType.sale,
+                price=price,
+                event_date=event_date,
+                source=ev.get("source", prop.source),
+            ))
+        await self.db.commit()
+
+    async def _persist_tax_history(self, prop: Property, events: list[dict]) -> None:
+        for ev in events:
+            year = ev.get("year")
+            if not year:
+                continue
+            try:
+                year = int(year)
+            except (ValueError, TypeError):
+                continue
+            self.db.add(TaxHistory(
+                property_id=prop.id,
+                year=year,
+                assessed_value=ev.get("assessed_value"),
+                tax_amount=ev.get("tax_amount"),
+                source=ev.get("source", prop.source),
+            ))
+        await self.db.commit()
 
     async def search(
         self,

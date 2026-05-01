@@ -99,6 +99,36 @@ class RentCastAdapter(BaseDataSource):
     async def get_price_history(self, property_external_id: str) -> list[dict]:
         return []
 
+    async def get_market_stats(
+        self, zip_code: str = None, city: str = None, state: str = None
+    ) -> dict:
+        # /markets requires zipCode — skip if not available
+        if not settings.RENTCAST_API_KEY or not zip_code:
+            return {}
+
+        cache_key = f"rentcast:market:{zip_code}"
+        cached = await cache_get(cache_key)
+        if cached:
+            return cached
+
+        await self._check_quota()
+        async with create_client(RENTCAST_BASE, headers={"X-Api-Key": settings.RENTCAST_API_KEY}) as client:
+            try:
+                resp = await client.get("/markets", params={"zipCode": zip_code})
+                resp.raise_for_status()
+                await self._increment_quota()
+                sale = resp.json().get("saleData", {})
+                result = {
+                    "median_price": sale.get("medianPrice"),
+                    "price_per_sqft": sale.get("medianPricePerSquareFoot"),
+                    "median_days_on_market": sale.get("medianDaysOnMarket"),
+                    "sales_volume_30d": sale.get("totalListings"),
+                }
+                await cache_set(cache_key, result, ttl=24 * 3600)
+                return result
+            except Exception:
+                return {}
+
     def _normalize_listing(self, data: dict) -> dict:
         """Normalize a /listings/sale response (includes asking price)."""
         raw_address = data.get("formattedAddress", "")
