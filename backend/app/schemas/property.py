@@ -40,29 +40,29 @@ class ComparableSale(BaseModel):
 
 
 class NeighborhoodSummary(BaseModel):
-    crime_index: Optional[Decimal] = None
+    crime_index: Optional[float] = None
     crime_grade: Optional[str] = None
-    median_household_income: Optional[Decimal] = None
+    median_household_income: Optional[float] = None
     population: Optional[int] = None
-    population_growth_pct: Optional[Decimal] = None
-    owner_occupied_pct: Optional[Decimal] = None
+    population_growth_pct: Optional[float] = None
+    owner_occupied_pct: Optional[float] = None
     walk_score: Optional[int] = None
     transit_score: Optional[int] = None
-    school_rating_avg: Optional[Decimal] = None
+    school_rating_avg: Optional[float] = None
 
     model_config = {"from_attributes": True}
 
 
 class MarketSummary(BaseModel):
-    median_price: Optional[Decimal] = None
-    price_per_sqft: Optional[Decimal] = None
-    median_days_on_market: Optional[Decimal] = None
-    months_of_supply: Optional[Decimal] = None
+    median_price: Optional[float] = None
+    price_per_sqft: Optional[float] = None
+    median_days_on_market: Optional[float] = None
+    months_of_supply: Optional[float] = None
     sales_volume_30d: Optional[int] = None
     sales_volume_90d: Optional[int] = None
-    yoy_price_change_pct: Optional[Decimal] = None
-    interest_rate_30yr: Optional[Decimal] = None
-    interest_rate_15yr: Optional[Decimal] = None
+    yoy_price_change_pct: Optional[float] = None
+    interest_rate_30yr: Optional[float] = None
+    interest_rate_15yr: Optional[float] = None
 
     model_config = {"from_attributes": True}
 

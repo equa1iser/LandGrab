@@ -128,45 +128,49 @@ async def test_census():
 # ── ATTOM ────────────────────────────────────────────────────────────────────
 
 async def test_attom():
-    section("ATTOM  (property detail + history)")
+    section("ATTOM  (property snapshot + detail)")
     if not settings.ATTOM_API_KEY:
-        skip("property/detail"); skip("property/address search"); return
+        skip("property/snapshot lat/lng"); skip("property/detail"); return
 
     headers = {"apikey": settings.ATTOM_API_KEY, "Accept": "application/json"}
     async with httpx.AsyncClient(
-        base_url="https://api.developer.attomdata.com/propertyapi/v1.0.0",
+        base_url="https://api.gateway.attomdata.com/propertyapi/v1.0.0",
         headers=headers, timeout=15,
     ) as client:
-        # Test property/detail
+        # Test snapshot by lat/lng (matches docs example)
         try:
-            r = await client.get("/property/detail",
-                                 params={"address1": "1 Apple Park Way", "postalcode": "95014"})
+            r = await client.get("/property/snapshot",
+                                 params={"latitude": 39.7047, "longitude": -105.0814,
+                                         "radius": 2, "pagesize": 2})
             if r.status_code == 200:
                 props = r.json().get("property", [])
-                addr = props[0].get("address", {}).get("line1") if props else None
-                ok("property/detail", f"address: {addr}" if addr else "returned data (no address field)")
+                first_addr = props[0].get("address", {}).get("line1") if props else None
+                ok("property/snapshot (lat/lng)",
+                   f"{len(props)} result(s)" + (f", first: {first_addr}" if first_addr else ""))
             elif r.status_code == 404:
-                fail("property/detail",
-                     "HTTP 404 — address not in ATTOM DB or trial plan doesn't include this endpoint")
+                fail("property/snapshot (lat/lng)",
+                     "HTTP 404 — no results or trial plan restriction")
             else:
-                fail("property/detail", f"HTTP {r.status_code}: {r.text[:200]}")
+                fail("property/snapshot (lat/lng)", f"HTTP {r.status_code}: {r.text[:200]}")
+        except Exception as e:
+            fail("property/snapshot (lat/lng)", str(e))
+
+        # Test property/detail by address (address1 + address2 city/state)
+        try:
+            r2 = await client.get("/property/detail",
+                                  params={"address1": "650 S Wadsworth Blvd", "address2": "Lakewood CO"})
+            body = r2.json()
+            status_msg = body.get("status", {}).get("msg", "")
+            if r2.status_code == 200:
+                props = body.get("property", [])
+                addr = props[0].get("address", {}).get("line1") if props else None
+                ok("property/detail", f"address: {addr}" if addr else "returned data")
+            elif status_msg == "SuccessWithoutResult":
+                ok("property/detail", "API connected — address not in DB (trial plan may limit coverage)")
+            else:
+                fail("property/detail", f"HTTP {r2.status_code}: {r2.text[:200]}")
         except Exception as e:
             fail("property/detail", str(e))
-
-        # Test address/city search
-        try:
-            r2 = await client.get("/property/address",
-                                  params={"postalcode": "78701", "pagesize": 2})
-            if r2.status_code == 200:
-                count = len(r2.json().get("property", []))
-                ok("property/address by ZIP", f"{count} result(s)")
-            elif r2.status_code == 404:
-                fail("property/address by ZIP",
-                     "HTTP 404 — ZIP not found or trial plan restriction")
-            else:
-                fail("property/address by ZIP", f"HTTP {r2.status_code}: {r2.text[:120]}")
-        except Exception as e:
-            fail("property/address by ZIP", str(e))
 
 
 # ── FBI Crime ────────────────────────────────────────────────────────────────

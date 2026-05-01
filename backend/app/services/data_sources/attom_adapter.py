@@ -5,7 +5,7 @@ from app.services.data_sources.http_client import create_client, retry_on_http_e
 from app.core.config import settings
 from app.core.redis_client import cache_get, cache_set, PROPERTY_TTL
 
-ATTOM_BASE = "https://api.developer.attomdata.com/propertyapi/v1.0.0"
+ATTOM_BASE = "https://api.gateway.attomdata.com/propertyapi/v1.0.0"
 
 
 class ATTOMAdapter(BaseDataSource):
@@ -39,7 +39,7 @@ class ATTOMAdapter(BaseDataSource):
 
         async with create_client(ATTOM_BASE, headers=self._headers()) as client:
             try:
-                data = await self._fetch_detail(client, address, zip_code)
+                data = await self._fetch_detail(client, address, zip_code, city, state)
                 if data:
                     normalized = self._normalize(data)
                     await cache_set(cache_key, normalized, ttl=PROPERTY_TTL)
@@ -49,11 +49,13 @@ class ATTOMAdapter(BaseDataSource):
         return None
 
     @retry_on_http_error
-    async def _fetch_detail(self, client, address: str, zip_code: str) -> Optional[dict]:
-        resp = await client.get(
-            "/property/detail",
-            params={"address1": address, "postalcode": zip_code},
-        )
+    async def _fetch_detail(self, client, address: str, zip_code: str, city: str = "", state: str = "") -> Optional[dict]:
+        params = {"address1": address}
+        if city and state:
+            params["address2"] = f"{city} {state}"
+        else:
+            params["postalcode"] = zip_code
+        resp = await client.get("/property/detail", params=params)
         resp.raise_for_status()
         data = resp.json()
         properties = data.get("property", [])
@@ -65,7 +67,8 @@ class ATTOMAdapter(BaseDataSource):
         building = data.get("building", {})
         lot = data.get("lot", {})
         address = data.get("address", {})
-        sale = data.get("sale", {}).get("saleAmountData", {})
+        sale = data.get("sale", {})
+        sale_amount = sale.get("saleAmountData", sale)  # snapshot puts price at top level
 
         return {
             "external_id": str(ident.get("attomId", "")),
@@ -83,7 +86,7 @@ class ATTOMAdapter(BaseDataSource):
             "lot_size_acres": lot.get("lotsize2"),
             "year_built": summary.get("yearbuilt"),
             "property_type": self._map_type(summary.get("proptype")),
-            "current_price": sale.get("saleamt"),
+            "current_price": sale_amount.get("saleamt"),
             "raw_data": data,
         }
 
@@ -153,25 +156,37 @@ class ATTOMAdapter(BaseDataSource):
         min_price=None, max_price=None,
         beds=None, baths=None,
         property_type=None, limit=20,
+        lat=None, lng=None, radius=2,
     ) -> list[dict]:
         if not settings.ATTOM_API_KEY:
             return []
 
-        params = {"pagesize": min(limit, 50)}
-        if zip_code:
-            params["postalcode"] = zip_code
-        if city:
-            params["address2"] = city
-        if min_price:
-            params["minSaleAmt"] = min_price
-        if max_price:
-            params["maxSaleAmt"] = max_price
-        if beds:
-            params["minBeds"] = beds
-
         async with create_client(ATTOM_BASE, headers=self._headers()) as client:
             try:
-                resp = await client.get("/property/address", params=params)
+                if lat is not None and lng is not None:
+                    params = {
+                        "latitude": lat,
+                        "longitude": lng,
+                        "radius": radius,
+                        "pagesize": min(limit, 50),
+                    }
+                    resp = await client.get("/property/snapshot", params=params)
+                else:
+                    params = {"pagesize": min(limit, 50)}
+                    if zip_code:
+                        params["postalcode"] = zip_code
+                    if city:
+                        params["address2"] = city
+                    if state:
+                        params["state"] = state
+                    if min_price:
+                        params["minSaleAmt"] = min_price
+                    if max_price:
+                        params["maxSaleAmt"] = max_price
+                    if beds:
+                        params["minBeds"] = beds
+                    resp = await client.get("/property/snapshot", params=params)
+
                 resp.raise_for_status()
                 properties = resp.json().get("property", [])
                 return [self._normalize(p) for p in properties]
