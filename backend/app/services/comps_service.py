@@ -1,16 +1,16 @@
 import math
 import uuid
 from typing import Optional
-from datetime import date, timedelta
+from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.models.property import Property, PriceHistory, PriceEventType
+from app.models.property import Property
 from app.schemas.property import ComparableSale
 
 
 def _haversine_miles(lat1, lng1, lat2, lng2) -> float:
-    R = 3958.8  # Earth radius in miles
+    R = 3958.8
     lat1, lng1, lat2, lng2 = map(math.radians, [lat1, lng1, lat2, lng2])
     dlat = lat2 - lat1
     dlng = lng2 - lng1
@@ -27,55 +27,58 @@ class CompsService:
         if not subject:
             return []
 
-        cutoff = date.today() - timedelta(days=90)
-
-        # Find recent sales in same zip code
-        result = await self.db.execute(
-            select(Property, PriceHistory)
-            .join(PriceHistory, PriceHistory.property_id == Property.id)
+        # Find active listings in the same zip code with a price set.
+        # We use current_price from the Property table directly — ATTOM trial plan
+        # does not provide sale history, so joining on PriceHistory.sale events
+        # would always return zero results.
+        query = (
+            select(Property)
             .where(
                 Property.zip_code == subject.zip_code,
                 Property.id != subject.id,
-                Property.property_type == subject.property_type,
-                PriceHistory.event_type == PriceEventType.sale,
-                PriceHistory.event_date >= cutoff,
+                Property.current_price.isnot(None),
             )
-            .limit(50)
+            .limit(100)
         )
-        rows = result.all()
+        # Filter by property type when set on both sides
+        if subject.property_type:
+            query = query.where(Property.property_type == subject.property_type)
+
+        result = await self.db.execute(query)
+        candidates_raw = result.scalars().all()
 
         candidates = []
-        for prop, ph in rows:
-            # Filter by sqft similarity (within 30%)
+        for prop in candidates_raw:
             if subject.sqft and prop.sqft:
                 sqft_diff = abs(subject.sqft - prop.sqft) / subject.sqft
                 if sqft_diff > 0.30:
                     continue
 
-            # Calculate distance
             distance = None
             if subject.lat and subject.lng and prop.lat and prop.lng:
                 distance = _haversine_miles(
                     float(subject.lat), float(subject.lng),
                     float(prop.lat), float(prop.lng),
                 )
-                if distance > 1.5:  # more than 1.5 miles away
+                if distance > 1.5:
                     continue
 
             similarity = self._similarity_score(subject, prop, distance)
             price_per_sqft = None
-            if ph.price and prop.sqft:
-                price_per_sqft = float(ph.price) / prop.sqft
+            if prop.current_price and prop.sqft:
+                price_per_sqft = float(prop.current_price) / prop.sqft
+
+            list_date = prop.list_date or date.today()
 
             candidates.append((similarity, ComparableSale(
                 address=prop.address_line1,
                 city=prop.city,
                 state=prop.state,
-                price=ph.price,
+                price=prop.current_price,
                 sqft=prop.sqft,
                 beds=prop.beds,
                 baths=prop.baths,
-                sale_date=ph.event_date,
+                sale_date=list_date,
                 distance_miles=round(distance, 2) if distance else None,
                 price_per_sqft=round(price_per_sqft, 2) if price_per_sqft else None,
                 similarity_score=round(similarity, 2),

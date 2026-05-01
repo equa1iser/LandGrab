@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -29,26 +29,55 @@ class PropertyService:
         if not prop:
             return None
 
-        # Fetch price/tax history from external source if not yet in DB
-        needs_price = not prop.price_history and bool(prop.external_id)
-        needs_tax = not prop.tax_history and bool(prop.external_id)
+        needs_price = not prop.price_history
+        needs_tax = not prop.tax_history
+
+        # Resolve an ATTOM ID for history lookups.
+        # RentCast properties have a slug external_id, not an ATTOM numeric ID.
+        # Do an address-based ATTOM lookup first to get the real attomId.
+        attom_id = None
+        if needs_price or needs_tax:
+            if prop.source == "attom":
+                attom_id = prop.external_id
+            else:
+                attom = self.registry.get("attom")
+                if attom and await attom.is_available():
+                    attom_data = await attom.get_property_details(
+                        prop.address_line1, prop.city, prop.state, prop.zip_code
+                    )
+                    attom_id = attom_data.get("external_id") if attom_data else None
 
         neighborhood, market, raw_price, raw_tax = await asyncio.gather(
             self.neighborhood_service.get_or_fetch(prop.zip_code, prop.city, prop.state),
             self.market_service.get_or_fetch(prop.zip_code, prop.city, prop.state),
-            self.registry.get_price_history(prop.external_id, prop.source) if needs_price else _noop(),
-            self.registry.get_tax_history(prop.external_id, prop.source) if needs_tax else _noop(),
+            self.registry.get_price_history(attom_id, "attom") if (needs_price and attom_id) else _noop(),
+            self.registry.get_tax_history(attom_id, "attom") if (needs_tax and attom_id) else _noop(),
             return_exceptions=True,
         )
 
-        price_events = raw_price if needs_price and not isinstance(raw_price, Exception) else []
-        tax_events = raw_tax if needs_tax and not isinstance(raw_tax, Exception) else []
+        price_events = raw_price if (needs_price and attom_id and not isinstance(raw_price, Exception)) else []
+        tax_events = raw_tax if (needs_tax and attom_id and not isinstance(raw_tax, Exception)) else []
 
-        if price_events:
-            await self._persist_price_history(prop, price_events)
-        if tax_events:
-            await self._persist_tax_history(prop, tax_events)
+        # ATTOM trial plan returns empty saleHistory. Synthesize a listing event from
+        # the current asking price so the price history chart has at least one data point.
+        if needs_price and not price_events and prop.current_price:
+            derived_date = (
+                prop.list_date
+                or (date.today() - timedelta(days=int(prop.days_on_market or 0)))
+            )
+            price_events = [{
+                "price": prop.current_price,
+                "event_date": derived_date,
+                "event_type": PriceEventType.list,
+                "source": "listing",
+            }]
+
         if price_events or tax_events:
+            # Extract identity columns before any commit — commit expires the ORM object,
+            # and accessing attributes afterwards triggers a lazy load (MissingGreenlet).
+            prop_id = prop.id
+            prop_source = prop.source
+            await self._persist_history(prop_id, prop_source, price_events, tax_events)
             prop = await self._get_by_id(property_id)
 
         from app.schemas.property import NeighborhoodSummary, MarketSummary
@@ -69,30 +98,37 @@ class PropertyService:
             market=m_data,
         )
 
-    async def _persist_price_history(self, prop: Property, events: list[dict]) -> None:
-        for ev in events:
+    async def _persist_history(
+        self,
+        prop_id: uuid.UUID,
+        prop_source: str,
+        price_events: list[dict],
+        tax_events: list[dict],
+    ) -> None:
+        for ev in price_events:
             price = ev.get("price")
             raw_date = ev.get("event_date")
             if not price or not raw_date:
                 continue
             try:
-                if isinstance(raw_date, str):
-                    event_date = datetime.strptime(raw_date[:10], "%Y-%m-%d").date()
-                else:
-                    event_date = raw_date
+                event_date = (
+                    datetime.strptime(raw_date[:10], "%Y-%m-%d").date()
+                    if isinstance(raw_date, str) else raw_date
+                )
             except (ValueError, TypeError):
                 continue
+            event_type = ev.get("event_type", PriceEventType.sale)
+            if isinstance(event_type, str):
+                event_type = PriceEventType(event_type)
             self.db.add(PriceHistory(
-                property_id=prop.id,
-                event_type=PriceEventType.sale,
+                property_id=prop_id,
+                event_type=event_type,
                 price=price,
                 event_date=event_date,
-                source=ev.get("source", prop.source),
+                source=ev.get("source", prop_source),
             ))
-        await self.db.commit()
 
-    async def _persist_tax_history(self, prop: Property, events: list[dict]) -> None:
-        for ev in events:
+        for ev in tax_events:
             year = ev.get("year")
             if not year:
                 continue
@@ -101,12 +137,13 @@ class PropertyService:
             except (ValueError, TypeError):
                 continue
             self.db.add(TaxHistory(
-                property_id=prop.id,
+                property_id=prop_id,
                 year=year,
                 assessed_value=ev.get("assessed_value"),
                 tax_amount=ev.get("tax_amount"),
-                source=ev.get("source", prop.source),
+                source=ev.get("source", prop_source),
             ))
+
         await self.db.commit()
 
     async def search(
