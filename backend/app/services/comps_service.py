@@ -22,7 +22,7 @@ class CompsService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_comps(self, property_id: str, limit: int = 5) -> list[ComparableSale]:
+    async def get_comps(self, property_id: str, limit: int = 5, max_distance: float = 20.0) -> list[ComparableSale]:
         subject = await self._get_property(property_id)
         if not subject:
             return []
@@ -44,7 +44,7 @@ class CompsService:
         if subject.property_type:
             query = query.where(Property.property_type == subject.property_type)
 
-        result = await self.db.execute(query)
+        result = await self.db.execute(query.limit(200))
         candidates_raw = result.scalars().all()
 
         candidates = []
@@ -60,7 +60,7 @@ class CompsService:
                     float(subject.lat), float(subject.lng),
                     float(prop.lat), float(prop.lng),
                 )
-                if distance > 1.5:
+                if distance > max_distance:
                     continue
 
             similarity = self._similarity_score(subject, prop, distance)

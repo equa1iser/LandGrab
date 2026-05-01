@@ -51,10 +51,14 @@ async def get_deal_score(property_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{property_id}/comps")
-async def get_comps(property_id: str, db: AsyncSession = Depends(get_db)):
+async def get_comps(
+    property_id: str,
+    max_distance: float = Query(20.0, ge=0.5, le=50.0),
+    db: AsyncSession = Depends(get_db),
+):
     from app.services.comps_service import CompsService
     service = CompsService(db)
-    return await service.get_comps(property_id)
+    return await service.get_comps(property_id, max_distance=max_distance)
 
 
 @router.get("/{property_id}/price-history")

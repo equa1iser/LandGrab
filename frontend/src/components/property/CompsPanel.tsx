@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+import { useComps } from "@/lib/hooks/useProperty";
 import { HudCard } from "@/components/ui/HudCard";
 import { MapPin, Calendar, Ruler } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -18,28 +22,69 @@ interface Comp {
 }
 
 interface CompsPanelProps {
-  comps: Comp[];
+  propertyId: string;
   subjectPrice?: number;
 }
 
-export function CompsPanel({ comps, subjectPrice }: CompsPanelProps) {
-  if (!comps || comps.length === 0) {
+const DISTANCES = [
+  { label: "20mi", value: 20 },
+  { label: "10mi", value: 10 },
+  { label: "5mi",  value: 5 },
+  { label: "1.5mi", value: 1.5 },
+] as const;
+
+export function CompsPanel({ propertyId, subjectPrice }: CompsPanelProps) {
+  const [maxDistance, setMaxDistance] = useState<number>(20);
+  const { data: comps, isLoading } = useComps(propertyId, maxDistance);
+
+  const header = (
+    <div className="flex items-center justify-end gap-1 mb-4">
+      {DISTANCES.map(({ label, value }) => (
+        <button
+          key={label}
+          onClick={() => setMaxDistance(value)}
+          className={clsx(
+            "px-2.5 py-0.5 font-mono text-xs border transition-colors",
+            maxDistance === value
+              ? "border-accent-cyan/60 text-accent-cyan bg-accent-cyan/10"
+              : "border-border-subtle text-text-muted hover:text-text-secondary hover:border-border-subtle/80"
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (isLoading) {
     return (
       <HudCard label="COMPARABLE SALES" className="p-6 pt-10">
-        <p className="text-text-muted font-mono text-sm text-center py-6">
-          No recent comparable sales found within 1.5 miles
+        {header}
+        <p className="text-text-muted font-mono text-sm text-center py-6 animate-pulse">
+          Scanning comparables...
         </p>
       </HudCard>
     );
   }
 
-  const avgPrice = comps.reduce((sum, c) => sum + c.price, 0) / comps.length;
-  const vsAvg = subjectPrice
-    ? ((subjectPrice - avgPrice) / avgPrice) * 100
-    : null;
+  if (!comps || comps.length === 0) {
+    return (
+      <HudCard label="COMPARABLE SALES" className="p-6 pt-10">
+        {header}
+        <p className="text-text-muted font-mono text-sm text-center py-6">
+          No comparable listings found within {maxDistance} miles
+        </p>
+      </HudCard>
+    );
+  }
+
+  const avgPrice = comps.reduce((sum: number, c: Comp) => sum + c.price, 0) / comps.length;
+  const vsAvg = subjectPrice ? ((subjectPrice - avgPrice) / avgPrice) * 100 : null;
 
   return (
     <HudCard label="COMPARABLE SALES" className="p-6 pt-10">
+      {header}
+
       {/* Summary */}
       <div className="flex items-center justify-between mb-4 pb-4 border-b border-border-subtle">
         <div>
@@ -58,11 +103,7 @@ export function CompsPanel({ comps, subjectPrice }: CompsPanelProps) {
             <div
               className={clsx(
                 "font-display font-bold text-xl",
-                vsAvg > 5
-                  ? "text-accent-red"
-                  : vsAvg < -5
-                  ? "text-accent-green"
-                  : "text-accent-amber"
+                vsAvg > 5 ? "text-accent-red" : vsAvg < -5 ? "text-accent-green" : "text-accent-amber"
               )}
             >
               {vsAvg > 0 ? "+" : ""}{vsAvg.toFixed(1)}%
@@ -73,7 +114,7 @@ export function CompsPanel({ comps, subjectPrice }: CompsPanelProps) {
 
       {/* Comp cards */}
       <div className="space-y-3">
-        {comps.map((comp, i) => {
+        {comps.map((comp: Comp, i: number) => {
           const priceDiff = subjectPrice
             ? ((comp.price - subjectPrice) / subjectPrice) * 100
             : null;
@@ -90,7 +131,7 @@ export function CompsPanel({ comps, subjectPrice }: CompsPanelProps) {
                   <div className="flex items-center gap-3 text-text-muted font-mono text-xs mt-1">
                     <span className="flex items-center gap-1">
                       <MapPin className="w-3 h-3" />
-                      {comp.distance_miles ? `${comp.distance_miles}mi` : "nearby"}
+                      {comp.distance_miles != null ? `${comp.distance_miles}mi` : "nearby"}
                     </span>
                     <span className="flex items-center gap-1">
                       <Calendar className="w-3 h-3" />

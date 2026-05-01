@@ -22,10 +22,10 @@ export function useDealScore(id: string) {
   });
 }
 
-export function useComps(id: string) {
+export function useComps(id: string, maxDistance: number = 20) {
   return useQuery({
-    queryKey: ["comps", id],
-    queryFn: () => api.getComps(id),
+    queryKey: ["comps", id, maxDistance],
+    queryFn: () => api.getComps(id, maxDistance),
     staleTime: 30 * 60 * 1000,
     enabled: !!id,
   });

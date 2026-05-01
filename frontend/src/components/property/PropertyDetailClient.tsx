@@ -1,6 +1,6 @@
 "use client";
 
-import { useProperty, useComps, usePriceHistory } from "@/lib/hooks/useProperty";
+import { useProperty, usePriceHistory } from "@/lib/hooks/useProperty";
 import { PriceHistoryChart } from "./PriceHistoryChart";
 import { TaxHistoryPanel } from "./TaxHistoryPanel";
 import { CompsPanel } from "./CompsPanel";
@@ -122,7 +122,6 @@ function PropertyHeader({ prop }: { prop: any }) {
 
 export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) {
   const { data, isLoading, error } = useProperty(propertyId);
-  const { data: comps } = useComps(propertyId);
   const { data: priceHistory } = usePriceHistory(propertyId);
 
   if (isLoading) {
@@ -160,7 +159,7 @@ export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) 
               currentPrice={prop.current_price}
             />
             <CompsPanel
-              comps={comps || data.comps || []}
+              propertyId={propertyId}
               subjectPrice={prop.current_price}
             />
             <TaxHistoryPanel

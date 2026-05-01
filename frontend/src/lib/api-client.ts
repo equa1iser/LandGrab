@@ -47,8 +47,8 @@ export const api = {
   getDealScore: (id: string) =>
     apiClient.get(`/properties/${id}/score`).then((r) => r.data),
 
-  getComps: (id: string) =>
-    apiClient.get(`/properties/${id}/comps`).then((r) => r.data),
+  getComps: (id: string, maxDistance: number = 20) =>
+    apiClient.get(`/properties/${id}/comps`, { params: { max_distance: maxDistance } }).then((r) => r.data),
 
   getPriceHistory: (id: string) =>
     apiClient.get(`/properties/${id}/price-history`).then((r) => r.data),
