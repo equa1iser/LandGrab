@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.models.deal_score import DealScore
 from app.models.property import Property
@@ -36,7 +37,11 @@ class DealScoreService:
             return self._to_dict(score)
 
         # Load property
-        prop_result = await self.db.execute(select(Property).where(Property.id == uid))
+        prop_result = await self.db.execute(
+            select(Property)
+            .options(selectinload(Property.price_history), selectinload(Property.tax_history))
+            .where(Property.id == uid)
+        )
         prop = prop_result.scalar_one_or_none()
         if not prop:
             return None
@@ -132,7 +137,7 @@ class DealScoreService:
             expires_at=datetime.utcnow() + timedelta(hours=12),
         )
         self.db.add(new_score)
-        await self.db.flush()
+        await self.db.commit()
 
         return self._to_dict(new_score)
 
