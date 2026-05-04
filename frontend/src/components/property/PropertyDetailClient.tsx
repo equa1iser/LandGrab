@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { useProperty, usePriceHistory } from "@/lib/hooks/useProperty";
 import { PriceHistoryChart } from "./PriceHistoryChart";
 import { TaxHistoryPanel } from "./TaxHistoryPanel";
@@ -9,9 +11,10 @@ import { MarketPanel } from "./MarketPanel";
 import { InterestRatesPanel } from "./InterestRatesPanel";
 import { DealScorePanel } from "./DealScorePanel";
 import { AVMPanel } from "./AVMPanel";
+import { api } from "@/lib/api-client";
 import {
   Bed, Bath, Square, MapPin, Calendar, Layers,
-  Home, Heart, Share2, ExternalLink,
+  Home, Heart, Share2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -19,7 +22,15 @@ interface PropertyDetailClientProps {
   propertyId: string;
 }
 
-function PropertyHeader({ prop }: { prop: any }) {
+function PropertyHeader({
+  prop,
+  isSaved,
+  onSave,
+}: {
+  prop: any;
+  isSaved: boolean;
+  onSave: () => void;
+}) {
   const pricePerSqft =
     prop.current_price && prop.sqft
       ? (prop.current_price / prop.sqft).toFixed(0)
@@ -104,9 +115,16 @@ function PropertyHeader({ prop }: { prop: any }) {
 
             {/* Actions */}
             <div className="flex items-center gap-2 justify-end mt-3">
-              <button className="flex items-center gap-1.5 px-3 py-1.5 border border-border-subtle text-text-muted
-                hover:border-accent-red/40 hover:text-accent-red transition-colors text-xs font-mono">
-                <Heart className="w-3.5 h-3.5" /> Save
+              <button
+                onClick={onSave}
+                className={`flex items-center gap-1.5 px-3 py-1.5 border transition-colors text-xs font-mono ${
+                  isSaved
+                    ? "border-accent-red/60 text-accent-red bg-accent-red/10"
+                    : "border-border-subtle text-text-muted hover:border-accent-red/40 hover:text-accent-red"
+                }`}
+              >
+                <Heart className={`w-3.5 h-3.5 ${isSaved ? "fill-accent-red" : ""}`} />
+                {isSaved ? "Saved" : "Save"}
               </button>
               <button className="flex items-center gap-1.5 px-3 py-1.5 border border-border-subtle text-text-muted
                 hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors text-xs font-mono">
@@ -123,6 +141,12 @@ function PropertyHeader({ prop }: { prop: any }) {
 export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) {
   const { data, isLoading, error } = useProperty(propertyId);
   const { data: priceHistory } = usePriceHistory(propertyId);
+  const [isSaved, setIsSaved] = useState(false);
+
+  const saveMutation = useMutation({
+    mutationFn: () => api.saveProperty(propertyId),
+    onSuccess: () => setIsSaved(true),
+  });
 
   if (isLoading) {
     return (
@@ -147,7 +171,7 @@ export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) 
 
   return (
     <div>
-      <PropertyHeader prop={prop} />
+      <PropertyHeader prop={prop} isSaved={isSaved} onSave={() => saveMutation.mutate()} />
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

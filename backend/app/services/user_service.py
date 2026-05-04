@@ -26,6 +26,10 @@ class UserService:
                 "address": prop.address_line1,
                 "city": prop.city,
                 "state": prop.state,
+                "zip_code": prop.zip_code,
+                "beds": prop.beds,
+                "baths": float(prop.baths) if prop.baths else None,
+                "sqft": prop.sqft,
                 "current_price": float(prop.current_price) if prop.current_price else None,
                 "price_snapshot": sp.price_snapshot,
                 "notes": sp.notes,
@@ -58,7 +62,7 @@ class UserService:
             alert_enabled=data.alert_enabled,
         )
         self.db.add(sp)
-        await self.db.flush()
+        await self.db.commit()
         return {"id": str(sp.id), "message": "saved"}
 
     async def remove_saved_property(self, user_id: uuid.UUID, saved_id: str):
@@ -71,7 +75,7 @@ class UserService:
         sp = result.scalar_one_or_none()
         if sp:
             await self.db.delete(sp)
-            await self.db.flush()
+            await self.db.commit()
 
     async def list_saved_searches(self, user_id: uuid.UUID) -> list[dict]:
         result = await self.db.execute(
@@ -100,7 +104,7 @@ class UserService:
             alert_frequency=data.alert_frequency,
         )
         self.db.add(ss)
-        await self.db.flush()
+        await self.db.commit()
         return {"id": str(ss.id), "name": ss.name}
 
     async def update_saved_search(
@@ -123,7 +127,7 @@ class UserService:
             ss.alert_enabled = data.alert_enabled
         if data.alert_frequency is not None:
             ss.alert_frequency = data.alert_frequency
-        await self.db.flush()
+        await self.db.commit()
         return {"id": str(ss.id), "name": ss.name}
 
     async def delete_saved_search(self, user_id: uuid.UUID, search_id: str):
@@ -136,4 +140,4 @@ class UserService:
         ss = result.scalar_one_or_none()
         if ss:
             await self.db.delete(ss)
-            await self.db.flush()
+            await self.db.commit()

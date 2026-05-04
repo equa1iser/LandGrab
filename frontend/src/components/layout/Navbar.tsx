@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, Bell, User, Map, LogOut } from "lucide-react";
+import { Search, Bell, User, Map, Heart, LogOut } from "lucide-react";
 import { clsx } from "clsx";
 import { useAuthStore } from "@/lib/store/authStore";
 
@@ -92,4 +92,5 @@ export function Navbar() {
 const NAV_LINKS = [
   { href: "/search", label: "Search", icon: Search },
   { href: "/map", label: "Map", icon: Map },
+  { href: "/favorites", label: "Watchlist", icon: Heart },
 ];

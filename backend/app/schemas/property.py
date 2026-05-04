@@ -29,13 +29,13 @@ class ComparableSale(BaseModel):
     address: str
     city: str
     state: str
-    price: Decimal
+    price: float
     sqft: Optional[int] = None
     beds: Optional[int] = None
-    baths: Optional[Decimal] = None
+    baths: Optional[float] = None
     sale_date: date
     distance_miles: Optional[float] = None
-    price_per_sqft: Optional[Decimal] = None
+    price_per_sqft: Optional[float] = None
     similarity_score: Optional[float] = None
 
 
