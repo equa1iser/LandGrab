@@ -7,7 +7,7 @@ from decimal import Decimal
 class PriceEvent(BaseModel):
     id: UUID4
     event_type: str
-    price: Decimal
+    price: float
     event_date: date
     source: str
     notes: Optional[str] = None
@@ -18,8 +18,8 @@ class PriceEvent(BaseModel):
 class TaxRecord(BaseModel):
     id: UUID4
     year: int
-    assessed_value: Optional[Decimal] = None
-    tax_amount: Optional[Decimal] = None
+    assessed_value: Optional[float] = None
+    tax_amount: Optional[float] = None
     source: str
 
     model_config = {"from_attributes": True}

@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timedelta, date
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete as sql_delete
 from sqlalchemy.orm import selectinload
 
 from app.models.property import Property, PriceHistory, TaxHistory, PriceEventType
@@ -29,14 +29,20 @@ class PropertyService:
         if not prop:
             return None
 
-        needs_price = not prop.price_history
+        existing_history = prop.price_history or []
+        # Treat a single synthetic "listing"-source event as if there's no history —
+        # we may now be able to extract real multi-point data from raw_data.
+        synthetic_only = (
+            len(existing_history) == 1
+            and existing_history[0].source == "listing"
+        )
+        needs_price = not existing_history or synthetic_only
         needs_tax = not prop.tax_history
 
-        # Resolve an ATTOM ID for history lookups.
+        # Only attempt the ATTOM lookup (slow, quota-limited) when needed.
         # RentCast properties have a slug external_id, not an ATTOM numeric ID.
-        # Do an address-based ATTOM lookup first to get the real attomId.
         attom_id = None
-        if needs_price or needs_tax:
+        if needs_tax:  # ATTOM is useful for tax history; price history comes from raw_data
             if prop.source == "attom":
                 attom_id = prop.external_id
             else:
@@ -53,18 +59,32 @@ class PropertyService:
             except Exception as exc:
                 return exc
 
-        neighborhood, market, raw_price, raw_tax = await asyncio.gather(
+        neighborhood, market, raw_tax = await asyncio.gather(
             _with_timeout(self.neighborhood_service.get_or_fetch(prop.zip_code, prop.city, prop.state)),
             _with_timeout(self.market_service.get_or_fetch(prop.zip_code, prop.city, prop.state)),
-            _with_timeout(self.registry.get_price_history(attom_id, "attom")) if (needs_price and attom_id) else _noop(),
             _with_timeout(self.registry.get_tax_history(attom_id, "attom")) if (needs_tax and attom_id) else _noop(),
         )
 
-        price_events = raw_price if (needs_price and attom_id and not isinstance(raw_price, Exception)) else []
         tax_events = raw_tax if (needs_tax and attom_id and not isinstance(raw_tax, Exception)) else []
 
-        # ATTOM trial plan returns empty saleHistory. Synthesize a listing event from
-        # the current asking price so the price history chart has at least one data point.
+        # Build price history from raw_data['history'] (RentCast listing history).
+        # Each key is a YYYY-MM-DD date; each value has a price and event metadata.
+        # This covers all listing periods (initial list, price changes, re-lists).
+        price_events: list[dict] = []
+        if needs_price and prop.raw_data:
+            raw_hist = prop.raw_data.get("history") or {}
+            for date_str, ev in sorted(raw_hist.items()):
+                ev_price = ev.get("price")
+                if not ev_price:
+                    continue
+                price_events.append({
+                    "price": ev_price,
+                    "event_date": date_str,
+                    "event_type": PriceEventType.list,
+                    "source": "rentcast",
+                })
+
+        # Last resort: synthesize a single point from current_price if raw_data had nothing
         if needs_price and not price_events and prop.current_price:
             derived_date = (
                 prop.list_date
@@ -78,11 +98,15 @@ class PropertyService:
             }]
 
         if price_events or tax_events:
-            # Extract identity columns before any commit — commit expires the ORM object,
-            # and accessing attributes afterwards triggers a lazy load (MissingGreenlet).
             prop_id = prop.id
             prop_source = prop.source
-            await self._persist_history(prop_id, prop_source, price_events, tax_events)
+            # Replace synthetic-only history with real raw_data events
+            replace_price = synthetic_only and bool(price_events)
+            await self._persist_history(prop_id, prop_source, price_events, tax_events, replace_price)
+            # Expire all session state so the re-fetch hits the DB rather than the
+            # identity map — without this, SQLAlchemy may return stale relationship data
+            # from before the DELETE + INSERT within the same request.
+            self.db.expire_all()
             prop = await self._get_by_id(property_id)
 
         from app.schemas.property import NeighborhoodSummary, MarketSummary
@@ -109,7 +133,12 @@ class PropertyService:
         prop_source: str,
         price_events: list[dict],
         tax_events: list[dict],
+        replace_price: bool = False,
     ) -> None:
+        if replace_price and price_events:
+            # Wipe the old (synthetic) price history so we can insert real events
+            await self.db.execute(sql_delete(PriceHistory).where(PriceHistory.property_id == prop_id))
+
         for ev in price_events:
             price = ev.get("price")
             raw_date = ev.get("event_date")
