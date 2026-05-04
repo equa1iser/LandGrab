@@ -63,8 +63,8 @@ export function DealScoreMeter({ score, grade, verdict, size = "md" }: DealScore
   const startAngle = 135;
 
   return (
-    <div className="flex flex-col items-center gap-3">
-      <div className="relative overflow-hidden" style={{ width: sizes.svg, height: sizes.svg * 0.8 }}>
+    <div className="flex flex-col items-center gap-6">
+      <div className="relative" style={{ width: sizes.svg, height: sizes.svg * 0.75 }}>
         <svg
           width={sizes.svg}
           height={sizes.svg}
