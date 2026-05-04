@@ -14,6 +14,7 @@ interface Property {
   beds?: number;
   baths?: number;
   deal_score?: number;
+  property_type?: string;
 }
 
 interface PropertyMapProps {
@@ -21,10 +22,11 @@ interface PropertyMapProps {
   onPropertySelect?: (id: string) => void;
 }
 
-function scoreToColor(score?: number): string {
-  if (!score) return "#00d4ff";
-  if (score >= 75) return "#00ff41";
-  if (score >= 50) return "#f59e0b";
+function markerColor(prop: Property): string {
+  if (prop.property_type === "land") return "#00ff41";
+  if (!prop.deal_score) return "#00d4ff";
+  if (prop.deal_score >= 75) return "#00ff41";
+  if (prop.deal_score >= 50) return "#f59e0b";
   return "#ef4444";
 }
 
@@ -92,7 +94,7 @@ export function PropertyMap({ properties, onPropertySelect }: PropertyMapProps) 
       validProperties.forEach((prop) => {
         const el = document.createElement("div");
         el.className = "property-marker";
-        const color = scoreToColor(prop.deal_score);
+        const color = markerColor(prop);
         el.style.cssText = `
           width: 12px; height: 12px; border-radius: 50%;
           background: ${color}; border: 2px solid rgba(0,0,0,0.6);
@@ -188,7 +190,7 @@ export function PropertyMap({ properties, onPropertySelect }: PropertyMapProps) 
       <div className="absolute bottom-4 left-4 bg-bg-card/90 border border-border-subtle p-3 font-mono text-xs space-y-1.5">
         <div className="text-text-muted uppercase tracking-wider mb-2">Deal Score</div>
         {[
-          { color: "#00ff41", label: "75+ · Strong" },
+          { color: "#00ff41", label: "75+ · Strong / Land" },
           { color: "#f59e0b", label: "50-74 · Moderate" },
           { color: "#ef4444", label: "< 50 · Weak" },
           { color: "#00d4ff", label: "No score yet" },
