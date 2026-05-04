@@ -47,12 +47,17 @@ class PropertyService:
                     )
                     attom_id = attom_data.get("external_id") if attom_data else None
 
+        async def _with_timeout(coro, seconds=12):
+            try:
+                return await asyncio.wait_for(coro, timeout=seconds)
+            except Exception as exc:
+                return exc
+
         neighborhood, market, raw_price, raw_tax = await asyncio.gather(
-            self.neighborhood_service.get_or_fetch(prop.zip_code, prop.city, prop.state),
-            self.market_service.get_or_fetch(prop.zip_code, prop.city, prop.state),
-            self.registry.get_price_history(attom_id, "attom") if (needs_price and attom_id) else _noop(),
-            self.registry.get_tax_history(attom_id, "attom") if (needs_tax and attom_id) else _noop(),
-            return_exceptions=True,
+            _with_timeout(self.neighborhood_service.get_or_fetch(prop.zip_code, prop.city, prop.state)),
+            _with_timeout(self.market_service.get_or_fetch(prop.zip_code, prop.city, prop.state)),
+            _with_timeout(self.registry.get_price_history(attom_id, "attom")) if (needs_price and attom_id) else _noop(),
+            _with_timeout(self.registry.get_tax_history(attom_id, "attom")) if (needs_tax and attom_id) else _noop(),
         )
 
         price_events = raw_price if (needs_price and attom_id and not isinstance(raw_price, Exception)) else []

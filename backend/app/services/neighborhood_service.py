@@ -61,7 +61,7 @@ class NeighborhoodService:
 
         record.fetched_at = datetime.utcnow()
         record.expires_at = datetime.utcnow() + timedelta(hours=24)
-        await self.db.flush()
+        await self.db.commit()
 
         return self._to_dict(record)
 
