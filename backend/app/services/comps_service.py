@@ -51,7 +51,7 @@ class CompsService:
         for prop in candidates_raw:
             if subject.sqft and prop.sqft:
                 sqft_diff = abs(subject.sqft - prop.sqft) / subject.sqft
-                if sqft_diff > 0.30:
+                if sqft_diff > 0.50:
                     continue
 
             distance = None
@@ -90,19 +90,39 @@ class CompsService:
     def _similarity_score(self, subject: Property, comp: Property, distance: Optional[float]) -> float:
         score = 100.0
 
+        # Square footage — primary physical match signal (max 40pt penalty)
         if subject.sqft and comp.sqft:
             sqft_diff = abs(subject.sqft - comp.sqft) / subject.sqft
-            score -= sqft_diff * 50
+            score -= min(sqft_diff * 50, 40)
 
-        if distance is not None:
-            score -= distance * 10
-
+        # Beds — strong comparability signal (max 20pt penalty)
         if subject.beds and comp.beds:
-            score -= abs(subject.beds - comp.beds) * 5
+            score -= min(abs(subject.beds - comp.beds) * 10, 20)
 
+        # Baths — moderate signal (max 12pt penalty)
+        if subject.baths and comp.baths:
+            score -= min(abs(float(subject.baths) - float(comp.baths)) * 8, 12)
+
+        # Year built — age affects value comparability (max 15pt penalty)
         if subject.year_built and comp.year_built:
             year_diff = abs(subject.year_built - comp.year_built)
-            score -= min(year_diff * 0.5, 20)
+            score -= min(year_diff * 0.4, 15)
+
+        # Price per sqft proximity — keeps comps in the same value tier (max 15pt penalty)
+        if subject.current_price and subject.sqft and comp.current_price and comp.sqft:
+            subj_ppsf = float(subject.current_price) / subject.sqft
+            comp_ppsf = float(comp.current_price) / comp.sqft
+            ppsf_diff = abs(subj_ppsf - comp_ppsf) / subj_ppsf
+            score -= min(ppsf_diff * 20, 15)
+
+        # Distance — closer is more relevant but shouldn't dominate (max 10pt penalty)
+        if distance is not None:
+            score -= min(distance * 2, 10)
+
+        # Same property type is a meaningful bonus
+        if subject.property_type and comp.property_type:
+            if subject.property_type != comp.property_type:
+                score -= 8
 
         return max(score, 0.0)
 

@@ -14,12 +14,81 @@ import { AVMPanel } from "./AVMPanel";
 import { api } from "@/lib/api-client";
 import {
   Bed, Bath, Square, MapPin, Calendar, Layers,
-  Home, Heart, Share2,
+  Home, Heart, Share2, ChevronLeft, ChevronRight, Satellite,
 } from "lucide-react";
 import Link from "next/link";
 
 interface PropertyDetailClientProps {
   propertyId: string;
+}
+
+function PropertyPhotoHero({ prop }: { prop: any }) {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const photos: string[] = prop.photo_urls || [];
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+
+  if (photos.length > 0) {
+    return (
+      <div className="relative w-full h-72 bg-bg-secondary overflow-hidden group">
+        <img
+          src={photos[activeIdx]}
+          alt={prop.address_line1}
+          className="w-full h-full object-cover"
+        />
+        {photos.length > 1 && (
+          <>
+            <button
+              onClick={() => setActiveIdx((i) => (i - 1 + photos.length) % photos.length)}
+              className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/50 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <ChevronLeft className="w-4 h-4 text-white" />
+            </button>
+            <button
+              onClick={() => setActiveIdx((i) => (i + 1) % photos.length)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/50 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <ChevronRight className="w-4 h-4 text-white" />
+            </button>
+            <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
+              {photos.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveIdx(i)}
+                  className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                    i === activeIdx ? "bg-white" : "bg-white/40"
+                  }`}
+                />
+              ))}
+            </div>
+          </>
+        )}
+        <div className="absolute top-3 right-3 font-mono text-xs text-white/80 bg-black/50 px-2 py-0.5">
+          {activeIdx + 1} / {photos.length}
+        </div>
+      </div>
+    );
+  }
+
+  if (!token || !prop.lat || !prop.lng) return null;
+
+  const satelliteUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${prop.lng},${prop.lat},17,0/1200x400@2x?access_token=${token}`;
+
+  return (
+    <div className="relative w-full overflow-hidden bg-bg-secondary">
+      <img
+        src={satelliteUrl}
+        alt={`Aerial view of ${prop.address_line1}`}
+        className="w-full h-64 object-cover"
+        loading="lazy"
+      />
+      <div className="absolute bottom-2 left-3 flex items-center gap-1.5 font-mono text-xs text-white/70 bg-black/50 px-2 py-0.5">
+        <Satellite className="w-3 h-3" /> Aerial view
+      </div>
+      <div className="absolute bottom-2 right-3 font-mono text-xs text-white/50 bg-black/40 px-2 py-0.5">
+        © Mapbox © OpenStreetMap
+      </div>
+    </div>
+  );
 }
 
 function PropertyHeader({
@@ -172,6 +241,7 @@ export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) 
   return (
     <div>
       <PropertyHeader prop={prop} isSaved={isSaved} onSave={() => saveMutation.mutate()} />
+      <PropertyPhotoHero prop={prop} />
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
