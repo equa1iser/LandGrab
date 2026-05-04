@@ -157,7 +157,10 @@ class PropertyService:
         min_price=None, max_price=None, beds=None, baths=None,
         property_type=None, limit=20,
     ) -> list[PropertySummaryResponse]:
-        # First check our DB cache
+        cache_ttl = timedelta(hours=1)
+
+        # Check DB cache — only trust it if at least one result was synced recently,
+        # which indicates the API was queried for this location within the TTL window.
         query = select(Property)
         if zip_code:
             query = query.where(Property.zip_code == zip_code)
@@ -176,10 +179,14 @@ class PropertyService:
         result = await self.db.execute(query)
         cached = result.scalars().all()
 
-        if cached:
+        cache_fresh = any(
+            p.last_synced_at and (datetime.utcnow() - p.last_synced_at) < cache_ttl
+            for p in cached
+        )
+        if cached and cache_fresh:
             return [PropertySummaryResponse.model_validate(p) for p in cached]
 
-        # Fall back to external data source
+        # Cache is stale or empty — fetch from external source
         results = await self.registry.search_properties(
             city=city, state=state, zip_code=zip_code,
             min_price=min_price, max_price=max_price,
@@ -191,6 +198,10 @@ class PropertyService:
             prop = await self._upsert_property(data)
             if prop:
                 properties.append(PropertySummaryResponse.model_validate(prop))
+
+        # Fall back to stale cache if external fetch returned nothing
+        if not properties and cached:
+            return [PropertySummaryResponse.model_validate(p) for p in cached]
 
         return properties
 
