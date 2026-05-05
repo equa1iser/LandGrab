@@ -7,6 +7,7 @@ from sqlalchemy import select, delete as sql_delete
 from sqlalchemy.orm import selectinload
 
 from app.models.property import Property, PriceHistory, TaxHistory, PriceEventType
+from app.models.deal_score import DealScore
 from app.schemas.property import PropertyDetailResponse, PropertySummaryResponse, PropertyBase
 from app.services.data_sources.registry import get_registry
 from app.services.neighborhood_service import NeighborhoodService
@@ -188,8 +189,6 @@ class PropertyService:
     ) -> list[PropertySummaryResponse]:
         cache_ttl = timedelta(hours=1)
 
-        # Check DB cache — only trust it if at least one result was synced recently,
-        # which indicates the API was queried for this location within the TTL window.
         query = select(Property)
         if zip_code:
             query = query.where(Property.zip_code == zip_code)
@@ -212,27 +211,50 @@ class PropertyService:
             p.last_synced_at and (datetime.utcnow() - p.last_synced_at) < cache_ttl
             for p in cached
         )
+
+        props: list[Property] = []
         if cached and cache_fresh:
-            return [PropertySummaryResponse.model_validate(p) for p in cached]
+            props = list(cached)
+        else:
+            # Cache is stale or empty — fetch from external source
+            raw_results = await self.registry.search_properties(
+                city=city, state=state, zip_code=zip_code,
+                min_price=min_price, max_price=max_price,
+                beds=beds, baths=baths, property_type=property_type, limit=limit,
+            )
+            for data in raw_results:
+                prop = await self._upsert_property(data)
+                if prop:
+                    props.append(prop)
 
-        # Cache is stale or empty — fetch from external source
-        results = await self.registry.search_properties(
-            city=city, state=state, zip_code=zip_code,
-            min_price=min_price, max_price=max_price,
-            beds=beds, baths=baths, property_type=property_type, limit=limit,
+            # Fall back to stale cache if external fetch returned nothing
+            if not props and cached:
+                props = list(cached)
+
+        score_map = await self._batch_scores([p.id for p in props])
+        return [self._to_summary(p, score_map.get(p.id)) for p in props]
+
+    async def _batch_scores(self, prop_ids: list) -> dict:
+        if not prop_ids:
+            return {}
+        result = await self.db.execute(
+            select(DealScore.property_id, DealScore.score, DealScore.created_at)
+            .where(
+                DealScore.property_id.in_(prop_ids),
+                DealScore.expires_at > datetime.utcnow(),
+            )
+            .order_by(DealScore.created_at.desc())
         )
+        score_map: dict = {}
+        for row in result.all():
+            if row.property_id not in score_map:
+                score_map[row.property_id] = row.score
+        return score_map
 
-        properties = []
-        for data in results:
-            prop = await self._upsert_property(data)
-            if prop:
-                properties.append(PropertySummaryResponse.model_validate(prop))
-
-        # Fall back to stale cache if external fetch returned nothing
-        if not properties and cached:
-            return [PropertySummaryResponse.model_validate(p) for p in cached]
-
-        return properties
+    def _to_summary(self, prop: Property, deal_score: Optional[int] = None) -> PropertySummaryResponse:
+        resp = PropertySummaryResponse.model_validate(prop)
+        resp.deal_score = deal_score
+        return resp
 
     async def get_price_history(self, property_id: str) -> list:
         prop = await self._get_by_id(property_id)
