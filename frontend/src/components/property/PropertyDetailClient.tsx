@@ -240,6 +240,11 @@ export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) 
   }
 
   if (error || !data) {
+    // 401 = token expired mid-session; redirect to login rather than showing "not found"
+    if ((error as any)?.response?.status === 401) {
+      router.replace("/auth/login");
+      return null;
+    }
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         <div className="font-mono text-accent-red">PROPERTY NOT FOUND</div>
