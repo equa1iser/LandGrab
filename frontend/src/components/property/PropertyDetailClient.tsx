@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { useProperty, usePriceHistory } from "@/lib/hooks/useProperty";
+import { useUsage } from "@/lib/hooks/useUsage";
+import { useAuthStore } from "@/lib/store/authStore";
 import { PriceHistoryChart } from "./PriceHistoryChart";
 import { TaxHistoryPanel } from "./TaxHistoryPanel";
 import { CompsPanel } from "./CompsPanel";
@@ -12,10 +15,11 @@ import { MarketPanel } from "./MarketPanel";
 import { InterestRatesPanel } from "./InterestRatesPanel";
 import { DealScorePanel } from "./DealScorePanel";
 import { AVMPanel } from "./AVMPanel";
+import { ProGate } from "@/components/ui/ProGate";
 import { api } from "@/lib/api-client";
 import {
   Bed, Bath, Square, MapPin, Calendar, Layers,
-  Home, Heart, Share2, ChevronLeft, ChevronRight, Satellite,
+  Home, Heart, Share2, ChevronLeft, ChevronRight, Satellite, Zap,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -209,14 +213,23 @@ function PropertyHeader({
 }
 
 export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) {
+  const router = useRouter();
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   const { data, isLoading, error } = useProperty(propertyId);
   const { data: priceHistory } = usePriceHistory(propertyId);
+  const { canView, viewsUsed, viewsLimit, isUnlimited } = useUsage();
   const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) router.replace("/auth/login");
+  }, [authLoading, isAuthenticated, router]);
 
   const saveMutation = useMutation({
     mutationFn: () => api.saveProperty(propertyId),
     onSuccess: () => setIsSaved(true),
   });
+
+  if (authLoading || !isAuthenticated) return null;
 
   if (isLoading) {
     return (
@@ -238,44 +251,93 @@ export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) 
   }
 
   const prop = data.property;
+  const locked = !canView;
 
   return (
     <div>
       <PropertyHeader prop={prop} isSaved={isSaved} onSave={() => saveMutation.mutate()} />
       <PropertyPhotoHero prop={prop} />
 
+      {/* Free-tier usage banner */}
+      {!isUnlimited && (
+        <div className={`border-b px-6 py-2 flex items-center justify-between ${
+          locked
+            ? "bg-accent-amber/10 border-accent-amber/30"
+            : "bg-bg-secondary border-border-subtle"
+        }`}>
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <Zap className={`w-3.5 h-3.5 ${locked ? "text-accent-amber" : "text-text-muted"}`} />
+            {locked ? (
+              <span className="text-accent-amber">
+                Free view limit reached ({viewsLimit}/{viewsLimit} used) — premium data is locked
+              </span>
+            ) : (
+              <span className="text-text-muted">
+                {viewsUsed} of {viewsLimit} free property views used this month
+              </span>
+            )}
+          </div>
+          {locked && (
+            <Link
+              href="/upgrade"
+              className="font-mono text-xs text-accent-amber border border-accent-amber/40 px-3 py-1 hover:bg-accent-amber/10 transition-colors"
+            >
+              Upgrade to Pro →
+            </Link>
+          )}
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
           {/* Left column — primary data */}
           <div className="lg:col-span-2 space-y-6">
-            <PriceHistoryChart
-              history={priceHistory || data.price_history || []}
-              currentPrice={prop.current_price}
-            />
-            <CompsPanel
-              propertyId={propertyId}
-              subjectPrice={prop.current_price}
-            />
-            <TaxHistoryPanel
-              history={data.tax_history || []}
-              currentPrice={prop.current_price}
-            />
+            <ProGate locked={locked}>
+              <PriceHistoryChart
+                history={priceHistory || data.price_history || []}
+                currentPrice={prop.current_price}
+              />
+            </ProGate>
+            <ProGate locked={locked}>
+              <CompsPanel
+                propertyId={propertyId}
+                subjectPrice={prop.current_price}
+              />
+            </ProGate>
+            <ProGate locked={locked}>
+              <TaxHistoryPanel
+                history={data.tax_history || []}
+                currentPrice={prop.current_price}
+              />
+            </ProGate>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <NeighborhoodPanel data={data.neighborhood} />
-              <CrimePanel data={data.neighborhood} />
+              <ProGate locked={locked}>
+                <NeighborhoodPanel data={data.neighborhood} />
+              </ProGate>
+              <ProGate locked={locked}>
+                <CrimePanel data={data.neighborhood} />
+              </ProGate>
             </div>
-            <MarketPanel data={data.market} zip={prop.zip_code} />
-            <InterestRatesPanel price={prop.current_price} />
+            <ProGate locked={locked}>
+              <MarketPanel data={data.market} zip={prop.zip_code} />
+            </ProGate>
+            <ProGate locked={locked}>
+              <InterestRatesPanel price={prop.current_price} />
+            </ProGate>
           </div>
 
           {/* Right column — AI analysis */}
           <div className="space-y-6">
-            <DealScorePanel propertyId={propertyId} />
-            <AVMPanel
-              propertyId={propertyId}
-              listPrice={prop.current_price}
-            />
+            <ProGate locked={locked}>
+              <DealScorePanel propertyId={propertyId} />
+            </ProGate>
+            <ProGate locked={locked}>
+              <AVMPanel
+                propertyId={propertyId}
+                listPrice={prop.current_price}
+              />
+            </ProGate>
 
             {/* Quick stats card */}
             <div className="hud-card p-5 space-y-3">

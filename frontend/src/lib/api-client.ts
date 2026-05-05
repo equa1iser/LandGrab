@@ -109,6 +109,10 @@ export const api = {
       new_password: newPassword,
     }),
 
+  // Usage / quota
+  getUsage: () =>
+    apiClient.get("/users/usage").then((r) => r.data),
+
   // Admin
   getAdminOverview: () =>
     apiClient.get("/admin/overview").then((r) => r.data),

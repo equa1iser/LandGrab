@@ -1,16 +1,25 @@
 "use client";
 
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { SearchBar } from "@/components/search/SearchBar";
 import { PropertyList } from "@/components/search/PropertyList";
 import { FilterPanel } from "@/components/search/FilterPanel";
 import { PropertyMap } from "@/components/map/PropertyMap";
 import { useSearch } from "@/lib/hooks/useSearch";
+import { useAuthStore } from "@/lib/store/authStore";
 
 function SearchContent() {
+  const router = useRouter();
+  const { isAuthenticated, isLoading } = useAuthStore();
   const searchParams = useSearchParams();
   const query = searchParams.get("q") || "";
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) router.replace("/auth/login");
+  }, [isLoading, isAuthenticated, router]);
+
+  if (isLoading || !isAuthenticated) return null;
   const { properties, isLoading } = useSearch(query);
 
   return (

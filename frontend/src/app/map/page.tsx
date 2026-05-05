@@ -1,9 +1,21 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { PropertyMap } from "@/components/map/PropertyMap";
 import { SearchBar } from "@/components/search/SearchBar";
+import { useAuthStore } from "@/lib/store/authStore";
 
 export default function MapPage() {
+  const router = useRouter();
+  const { isAuthenticated, isLoading } = useAuthStore();
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) router.replace("/auth/login");
+  }, [isLoading, isAuthenticated, router]);
+
+  if (isLoading || !isAuthenticated) return null;
+
   return (
     <div className="h-[calc(100vh-3.5rem)] flex flex-col">
       <div className="h-14 border-b border-border-subtle bg-bg-secondary flex items-center px-4 gap-4">

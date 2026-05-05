@@ -47,6 +47,14 @@ class SavedSearchCreate(BaseModel):
     alert_frequency: str = "daily"
 
 
+class UsageResponse(BaseModel):
+    views_used: int
+    views_limit: int       # 5 for free, -1 for unlimited (pro)
+    views_remaining: int   # -1 means unlimited
+    resets_at: str         # ISO datetime of first day of next month
+    is_unlimited: bool
+
+
 class SavedSearchUpdate(BaseModel):
     name: Optional[str] = None
     search_params: Optional[dict] = None

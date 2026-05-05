@@ -5,7 +5,11 @@ from typing import Annotated
 from app.core.database import get_db
 from app.api.v1.deps import get_current_user
 from app.models.user import User
-from app.schemas.user import UserResponse, SavedPropertyCreate, SavedSearchCreate, SavedSearchUpdate, UserProfileUpdate, UserPasswordUpdate
+from app.schemas.user import (
+    UserResponse, UsageResponse,
+    SavedPropertyCreate, SavedSearchCreate, SavedSearchUpdate,
+    UserProfileUpdate, UserPasswordUpdate,
+)
 
 router = APIRouter()
 
@@ -15,6 +19,14 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: CurrentUser):
     return current_user
+
+
+@router.get("/usage", response_model=UsageResponse)
+async def get_usage(current_user: CurrentUser):
+    from app.services.usage_service import get_usage as _get_usage
+    from app.models.user import UserTier
+    is_pro = current_user.tier == UserTier.pro
+    return await _get_usage(str(current_user.id), is_pro)
 
 
 @router.patch("/me", response_model=UserResponse)

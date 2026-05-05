@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # Frontend
     NEXT_PUBLIC_API_BASE_URL: str = "http://localhost:8000"
 
+    # Monetization
+    FREE_TIER_VIEW_LIMIT: int = 5
+
     # App
     APP_NAME: str = "LandGrab"
     VERSION: str = "1.0.0"
