@@ -22,7 +22,7 @@ interface PropertyMapProps {
   onPropertySelect?: (id: string) => void;
 }
 
-const LAND_GREEN = "#4CAF50";
+const LAND_GREEN = "#2e7d32";
 
 function markerColor(prop: Property): string {
   if (prop.property_type === "land") return LAND_GREEN;
@@ -196,7 +196,7 @@ export function PropertyMap({ properties, onPropertySelect }: PropertyMapProps) 
           { color: "#f59e0b", label: "50-74 · Moderate" },
           { color: "#ef4444", label: "< 50 · Weak" },
           { color: "#00d4ff", label: "No score yet" },
-          { color: "#4CAF50", label: "Land parcel" },
+          { color: "#2e7d32", label: "Land parcel" },
         ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-2">
             <div
