@@ -15,6 +15,7 @@ interface User {
   email: string;
   full_name: string;
   tier: string;
+  is_admin: boolean;
   preferences: UserPreferences;
   created_at: string;
 }

@@ -45,6 +45,7 @@ class NeighborhoodSummary(BaseModel):
     crime_rate_per_100k: Optional[float] = None
     violent_rate_per_100k: Optional[float] = None
     property_rate_per_100k: Optional[float] = None
+    crime_data_state: Optional[str] = None
     median_household_income: Optional[float] = None
     population: Optional[int] = None
     population_growth_pct: Optional[float] = None

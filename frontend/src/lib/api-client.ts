@@ -108,4 +108,14 @@ export const api = {
       current_password: currentPassword,
       new_password: newPassword,
     }),
+
+  // Admin
+  getAdminOverview: () =>
+    apiClient.get("/admin/overview").then((r) => r.data),
+
+  getAdminUsers: (page = 1, perPage = 20) =>
+    apiClient.get("/admin/users", { params: { page, per_page: perPage } }).then((r) => r.data),
+
+  updateAdminUser: (userId: string, data: { tier?: string; is_active?: boolean; is_admin?: boolean }) =>
+    apiClient.patch(`/admin/users/${userId}`, data).then((r) => r.data),
 };

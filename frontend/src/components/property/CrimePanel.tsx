@@ -10,6 +10,7 @@ interface CrimeData {
   crime_rate_per_100k?: number;
   violent_rate_per_100k?: number;
   property_rate_per_100k?: number;
+  crime_data_state?: string;
 }
 
 interface CrimePanelProps {
@@ -153,8 +154,13 @@ export function CrimePanel({ data }: CrimePanelProps) {
           />
         </div>
 
-        <div className="font-mono text-[10px] text-text-muted pt-1 border-t border-border-subtle">
-          Source: FBI Crime Data Explorer · Rates per 100k residents/yr
+        <div className="font-mono text-[10px] text-text-muted pt-1 border-t border-border-subtle flex items-center justify-between gap-2">
+          <span>Source: FBI Crime Data Explorer · Rates per 100k residents/yr</span>
+          {data.crime_data_state && (
+            <span className="text-text-muted/60 shrink-0">
+              State-level · {data.crime_data_state.toUpperCase()}
+            </span>
+          )}
         </div>
       </div>
     </HudCard>

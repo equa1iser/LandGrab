@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, Bell, User, Map, Heart, LogOut, Settings } from "lucide-react";
+import { Search, Bell, User, Map, Heart, LogOut, Settings, ShieldCheck } from "lucide-react";
 import { clsx } from "clsx";
 import { useAuthStore } from "@/lib/store/authStore";
 
@@ -38,6 +38,7 @@ export function Navbar() {
         <div className="hidden md:flex items-center gap-6 font-mono text-xs uppercase tracking-widest">
           {NAV_LINKS.map((link) => {
             if (link.authOnly && !isAuthenticated) return null;
+            if (link.adminOnly && !user?.is_admin) return null;
             return (
               <Link
                 key={link.href}
@@ -102,7 +103,8 @@ export function Navbar() {
 }
 
 const NAV_LINKS = [
-  { href: "/search", label: "Search", icon: Search, authOnly: false },
-  { href: "/map", label: "Map", icon: Map, authOnly: false },
-  { href: "/favorites", label: "Watchlist", icon: Heart, authOnly: true },
+  { href: "/search", label: "Search", icon: Search, authOnly: false, adminOnly: false },
+  { href: "/map", label: "Map", icon: Map, authOnly: false, adminOnly: false },
+  { href: "/favorites", label: "Watchlist", icon: Heart, authOnly: true, adminOnly: false },
+  { href: "/admin", label: "Admin", icon: ShieldCheck, authOnly: true, adminOnly: true },
 ];

@@ -1,6 +1,7 @@
 from pydantic import BaseModel, UUID4, EmailStr
 from typing import Optional
 from datetime import datetime
+from uuid import UUID
 
 
 class UserPreferences(BaseModel):
@@ -16,6 +17,7 @@ class UserResponse(BaseModel):
     full_name: str
     tier: str
     is_active: bool
+    is_admin: bool = False
     preferences: UserPreferences = UserPreferences()
     created_at: datetime
 
@@ -50,3 +52,53 @@ class SavedSearchUpdate(BaseModel):
     search_params: Optional[dict] = None
     alert_enabled: Optional[bool] = None
     alert_frequency: Optional[str] = None
+
+
+# --- Admin schemas ---
+
+class AdminUserItem(BaseModel):
+    id: UUID4
+    email: str
+    full_name: str
+    tier: str
+    is_active: bool
+    is_admin: bool
+    is_verified: bool
+    created_at: datetime
+    saved_properties_count: int = 0
+    saved_searches_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class AdminUserUpdate(BaseModel):
+    tier: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_admin: Optional[bool] = None
+
+
+class AdminUserStats(BaseModel):
+    total: int
+    active: int
+    verified: int
+    pro: int
+    admins: int
+    new_7d: int
+    new_30d: int
+
+
+class AdminPropertyStats(BaseModel):
+    total_cached: int
+    sources: dict
+
+
+class AdminApiUsage(BaseModel):
+    rentcast_calls_this_month: int
+    rentcast_monthly_quota: int
+    api_keys_configured: dict
+
+
+class AdminOverview(BaseModel):
+    users: AdminUserStats
+    properties: AdminPropertyStats
+    api_usage: AdminApiUsage

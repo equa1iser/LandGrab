@@ -75,6 +75,7 @@ class NeighborhoodService:
             "crime_rate_per_100k": fbi.get("crime_rate_per_100k"),
             "violent_rate_per_100k": fbi.get("violent_rate_per_100k"),
             "property_rate_per_100k": fbi.get("property_rate_per_100k"),
+            "crime_data_state": fbi.get("state"),
             "median_household_income": record.median_household_income,
             "population": record.population,
             "population_growth_pct": record.population_growth_pct,
