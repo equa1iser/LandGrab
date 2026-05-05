@@ -2,8 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
+import { useAuthStore } from "@/lib/store/authStore";
 
 export function useSearch(query: string) {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isAddress = /\d/.test(query) && query.length > 5;
   const isZip = /^\d{5}$/.test(query.trim());
 
@@ -13,7 +15,6 @@ export function useSearch(query: string) {
   } else if (isAddress) {
     params.address = query;
   } else if (query) {
-    // City/state — parse "Austin TX" style
     const parts = query.trim().split(/\s+/);
     if (parts.length >= 2 && parts[parts.length - 1].length === 2) {
       params.state = parts[parts.length - 1].toUpperCase();
@@ -26,7 +27,7 @@ export function useSearch(query: string) {
   const { data, isLoading, error } = useQuery({
     queryKey: ["search", query],
     queryFn: () => (query ? api.searchProperties(params) : Promise.resolve([])),
-    enabled: query.length >= 2,
+    enabled: query.length >= 2 && isAuthenticated,
     staleTime: 2 * 60 * 1000,
   });
 

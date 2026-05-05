@@ -11,16 +11,18 @@ import { useAuthStore } from "@/lib/store/authStore";
 
 function SearchContent() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   const searchParams = useSearchParams();
   const query = searchParams.get("q") || "";
 
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) router.replace("/auth/login");
-  }, [isLoading, isAuthenticated, router]);
+  // Must be called before any conditional return (React rules of hooks)
+  const { properties, isLoading: searchLoading } = useSearch(query);
 
-  if (isLoading || !isAuthenticated) return null;
-  const { properties, isLoading } = useSearch(query);
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) router.replace("/auth/login");
+  }, [authLoading, isAuthenticated, router]);
+
+  if (authLoading || !isAuthenticated) return null;
 
   return (
     <div className="mt-14 h-[calc(100vh-3.5rem)] flex flex-col">
@@ -35,7 +37,7 @@ function SearchContent() {
         {/* Property list */}
         <div className="w-[420px] flex-shrink-0 overflow-y-auto border-r border-border-subtle bg-bg-primary">
           <div className="p-4">
-            {isLoading ? (
+            {searchLoading ? (
               <div className="font-mono text-text-muted text-sm py-8 text-center">
                 <span className="animate-blink">█</span> SCANNING...
               </div>
