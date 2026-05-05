@@ -109,13 +109,24 @@ All keys live in `.env` at the project root. The `Settings` class in `backend/ap
 | `API_NINJAS_KEY` | API Ninjas | Active — city / ZIP supplemental data |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | Mapbox | Active — map tiles + satellite aerial views (browser-side) |
 | `ANTHROPIC_API_KEY` | Anthropic | Not yet configured — deal score falls back to rule-based only |
-| `FBI_CRIME_API_KEY` | FBI CDE | Not yet configured; base URL: `https://api.usa.gov/crime/fbi/cde/` |
+| `FBI_CRIME_API_KEY` | FBI CDE | Active — state-level violent + property crime rates |
 
 ### RentCast search behaviour
 
 `search_properties` uses `/listings/sale` (active listings with asking prices) and falls back to `/properties` (property records, no price). The monthly quota is capped at 50 calls tracked in Redis under `rentcast:monthly_calls`.
 
 Price history is extracted from `raw_data['history']` on each RentCast listing — a dict keyed by `YYYY-MM-DD` date with price + event metadata. This is multi-event for re-listed properties. Do not rely on ATTOM for price history (trial plan returns empty `saleHistory`).
+
+### FBI Crime API
+
+Base URL: `https://api.usa.gov/crime/fbi/cde`
+
+Correct endpoints (confirmed working):
+- `/agency/byStateAbbr/{STATE}?API_KEY=...` — agency list, confirms key + connectivity
+- `/summarized/state/{STATE}/violent-crime?from=MM-YYYY&to=MM-YYYY&API_KEY=...`
+- `/summarized/state/{STATE}/property-crime?from=MM-YYYY&to=MM-YYYY&API_KEY=...`
+
+`API_KEY` is a **query param**, not a header. Date format is `MM-YYYY` (e.g. `01-2022`). The adapter computes `violent_rate_per_100k`, `property_rate_per_100k`, `crime_rate_per_100k`, `crime_index` (0–100), and `crime_grade` (A–F). Data is state-level, not city-level.
 
 ---
 
@@ -128,7 +139,8 @@ backend/app/
 │   ├── deps.py                       # get_db, get_current_user
 │   └── routes/
 │       ├── auth.py                   # register, login, refresh, logout
-│       ├── users.py                  # me, saved-properties, saved-searches
+│       ├── users.py                  # me, PATCH /me, PUT /preferences, PUT /password,
+│       │                             # saved-properties, saved-searches
 │       ├── properties.py             # search, detail, score, comps, avm, price-history
 │       ├── search.py                 # autocomplete
 │       └── market.py                 # rates/current, /{zip}
@@ -140,24 +152,30 @@ backend/app/
 ├── models/
 │   ├── property.py                   # Property, PriceHistory, TaxHistory, PriceEventType
 │   ├── deal_score.py                 # DealScore (property_id FK, score, expires_at)
-│   ├── user.py                       # User, SavedProperty, SavedSearch
+│   ├── user.py                       # User (+ preferences JSONB), SavedProperty, SavedSearch
 │   ├── neighborhood.py               # NeighborhoodData
 │   ├── market.py                     # MarketData
 │   ├── alert.py                      # PriceAlert
 │   └── ml.py                         # MLModelMetrics
-├── schemas/property.py               # PropertyBase, PropertySummaryResponse (+ deal_score),
-│                                     # PropertyDetailResponse, ComparableSale, PriceEvent,
-│                                     # TaxRecord, DealScoreSummary, NeighborhoodSummary, MarketSummary
+├── schemas/
+│   ├── property.py                   # PropertyBase, PropertySummaryResponse (+ deal_score),
+│   │                                 # PropertyDetailResponse, ComparableSale, PriceEvent,
+│   │                                 # TaxRecord, DealScoreSummary, NeighborhoodSummary
+│   │                                 # (+ crime_rate_per_100k, violent_rate_per_100k,
+│   │                                 # property_rate_per_100k), MarketSummary
+│   └── user.py                       # UserPreferences, UserProfileUpdate, UserPasswordUpdate,
+│                                     # UserResponse (+ preferences, created_at)
 ├── services/
 │   ├── property_service.py           # search() batch-fetches DealScore; _to_summary(); get_detail()
 │   ├── comps_service.py              # Haversine + 6-signal similarity rank
-│   ├── neighborhood_service.py       # Census + FBI Crime; commits to DB
+│   ├── neighborhood_service.py       # Census + FBI Crime; _to_dict() surfaces FBI raw_sources
 │   ├── market_service.py             # Market stats; commits to DB
-│   ├── user_service.py               # Saved props/searches CRUD; all writes use commit()
+│   ├── user_service.py               # Saved props/searches + update_profile/preferences/password
 │   ├── auth_service.py               # register, login, refresh, logout
 │   ├── geocoding_service.py          # Autocomplete
 │   ├── ai/
-│   │   ├── scoring_engine.py         # 6-component rule-based scoring
+│   │   ├── scoring_engine.py         # 6-component rule-based scoring; uses raw FBI rates
+│   │   │                             # (violent/property per 100k) over normalized index
 │   │   ├── claude_analyzer.py        # Claude API integration
 │   │   ├── deal_score_service.py     # get_or_compute; uses selectinload; commits score
 │   │   └── valuation_model.py        # GradientBoosting AVM
@@ -169,7 +187,7 @@ backend/app/
 │       ├── attom_adapter.py
 │       ├── fred_adapter.py
 │       ├── census_adapter.py
-│       ├── fbi_crime_adapter.py
+│       ├── fbi_crime_adapter.py      # /summarized/state/{STATE}/{offense-type}, MM-YYYY dates
 │       └── http_client.py
 └── tasks/
     ├── celery_app.py
@@ -185,9 +203,10 @@ frontend/src/
 │   ├── property/[id]/page.tsx        # Property detail (SSR wrapper)
 │   ├── favorites/page.tsx            # Watchlist — saved properties grid
 │   ├── map/page.tsx                  # Full-screen map
+│   ├── profile/page.tsx              # Profile: account, notification prefs, change password
 │   └── auth/{login,register}/page.tsx
 ├── components/
-│   ├── layout/Navbar.tsx             # Search | Map | Watchlist | auth links
+│   ├── layout/Navbar.tsx             # Search | Map | Watchlist (auth only) | profile chip | sign out
 │   ├── search/
 │   │   ├── SearchBar.tsx             # Input + localStorage history dropdown (8 entries)
 │   │   ├── FilterPanel.tsx
@@ -197,22 +216,26 @@ frontend/src/
 │   │   ├── PriceHistoryChart.tsx
 │   │   ├── TaxHistoryPanel.tsx
 │   │   ├── CompsPanel.tsx
-│   │   ├── NeighborhoodPanel.tsx
+│   │   ├── NeighborhoodPanel.tsx     # Schools, walk/transit, income/population (no crime)
+│   │   ├── CrimePanel.tsx            # FBI data: grade chip, crime index, violent/property/total
+│   │   │                             # rate bars vs national averages
 │   │   ├── MarketPanel.tsx
 │   │   ├── InterestRatesPanel.tsx
 │   │   ├── DealScorePanel.tsx
 │   │   └── AVMPanel.tsx
 │   ├── map/PropertyMap.tsx           # Color-coded markers, mapReady guard, legend
+│   │                                 # Land parcels: dark forest green (#2e7d32)
 │   ├── ui/
 │   │   ├── HudCard.tsx
 │   │   ├── StatBadge.tsx
 │   │   └── DealScoreMeter.tsx        # Animated circular gauge; container height = SVG height
 │   └── providers/QueryProvider.tsx
 ├── lib/
-│   ├── api-client.ts                 # Axios, 30s timeout
+│   ├── api-client.ts                 # Axios, 30s timeout; updateProfile, updatePreferences,
+│   │                                 # changePassword methods
 │   ├── hooks/useProperty.ts          # useProperty, usePriceHistory, useDealScore
 │   ├── hooks/useSearch.ts
-│   └── store/authStore.ts
+│   └── store/authStore.ts            # User type includes preferences + created_at; updateUser action
 └── __tests__/
     ├── Navbar.test.tsx
     ├── SearchBar.test.tsx
@@ -268,6 +291,14 @@ Tests live in `frontend/src/__tests__/`. Components that use `next/navigation` o
 | `SearchBar.test.tsx` | Input rendering, initial value prop, history dropdown, submission + navigation |
 | `RegisterPage.test.tsx` | Form fields, validation, API call, error handling, success redirect |
 
+### Live API diagnostic
+
+```bash
+docker compose exec backend python scripts/test_apis.py
+```
+
+Tests: RentCast (listings, properties, markets), FRED (mortgage rate), Census (ACS5 income), ATTOM (snapshot + detail), FBI Crime (agency list, violent-crime, property-crime, FBICrimeAdapter end-to-end), API Ninjas (city lookup), Anthropic (messages.create), Mapbox (token validation).
+
 ---
 
 ## Known Architecture Decisions & Bug History
@@ -319,11 +350,34 @@ The circular gauge SVG is `sizes.svg` pixels tall. The container div must also b
 docker compose exec db psql -U landgrab -d landgrab -c "DELETE FROM properties;"
 ```
 
+### Neighborhood cache staleness — FBI data missing
+`neighborhood_data` records are cached for 24 hours. If records were created before the FBI adapter was working, they will have `raw_sources` with only a `census` key and no `fbi_crime` key. The Crime & Safety panel will show "unavailable" until the cache expires or is cleared. Fix:
+
+```bash
+docker compose exec db psql -U landgrab -d landgrab -c "DELETE FROM neighborhood_data;"
+docker compose exec redis redis-cli KEYS "fbi:*" | xargs docker compose exec redis redis-cli DEL
+```
+
+New property loads will re-fetch from both Census and FBI and store the full data.
+
+### FBI CDE API — correct endpoints and parameters
+The FBI Crime Data Explorer API has non-obvious requirements that caused 404/400 errors:
+- Offense type is a **path segment**, not a query param: `/summarized/state/{STATE}/violent-crime`
+- Date range format is `MM-YYYY` (e.g. `01-2022`), not plain year — omitting causes HTTP 400
+- Auth key is `API_KEY` as a **query param**, not a header
+- Data is **state-level only** — the `city` argument to `get_crime_data()` is ignored by the API
+
+### User preferences — JSONB column on users table
+User notification preferences are stored as a JSONB column (`preferences`) on the `users` table, added via migration `b2c4d6e8f001_add_user_preferences`. The `UserResponse` schema includes a `preferences: UserPreferences` field. Frontend auth store's `User` type includes `preferences` and `created_at`. Profile page endpoints: `PATCH /users/me`, `PUT /users/preferences`, `PUT /users/password`.
+
 ### passlib + bcrypt compatibility
 Pin `bcrypt<4.0.0` in `backend/requirements.txt`. bcrypt 4+ is incompatible with `passlib[bcrypt]==1.7.4` and raises `ValueError` on every auth request.
 
 ### Property detail timeout
 `get_detail()` uses `asyncio.gather` with a 12-second `_with_timeout` wrapper for neighborhood, market, and tax fetches. The frontend Axios timeout is 30 seconds. ATTOM is only queried for tax history, not for price history (use `raw_data['history']` from RentCast instead).
+
+### Adding new API data — integrate into deal scoring
+When a new data source is added and returns structured metrics, update `scoring_engine.py` to incorporate those metrics into the relevant component score. FBI crime rates (`violent_rate_per_100k`, `property_rate_per_100k`) are used directly in `_score_neighborhood()` benchmarked against national averages (violent ~370/100k/yr, property ~2100/100k/yr), falling back to the normalized `crime_index` when raw rates are unavailable.
 
 ---
 
