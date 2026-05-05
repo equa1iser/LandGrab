@@ -51,3 +51,17 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Celery
+backend/celerybeat-schedule
+backend/celerybeat-schedule.db
+
+# TypeScript build cache
+tsconfig.tsbuildinfo
+frontend/tsconfig.tsbuildinfo
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# One-off debug scripts
+backend/test_reg.py
