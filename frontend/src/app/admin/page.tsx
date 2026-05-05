@@ -95,7 +95,7 @@ function StatusDot({ active }: { active: boolean }) {
 
 export default function AdminPage() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading } = useAuthStore();
+  const { user, isAuthenticated, isInitialized } = useAuthStore();
 
   const [overview, setOverview] = useState<Overview | null>(null);
   const [usersPage, setUsersPage] = useState<UsersPage | null>(null);
@@ -104,12 +104,12 @@ export default function AdminPage() {
   const [loadingOverview, setLoadingOverview] = useState(true);
   const [loadingUsers, setLoadingUsers] = useState(true);
 
-  // Guard: redirect non-admins
+  // Guard: redirect non-admins (wait for isInitialized before checking)
   useEffect(() => {
-    if (!isLoading && (!isAuthenticated || (user && !user.is_admin))) {
+    if (isInitialized && (!isAuthenticated || (user && !user.is_admin))) {
       router.replace("/");
     }
-  }, [isLoading, isAuthenticated, user, router]);
+  }, [isInitialized, isAuthenticated, user, router]);
 
   const loadOverview = useCallback(async () => {
     setLoadingOverview(true);
@@ -131,8 +131,13 @@ export default function AdminPage() {
     }
   }, []);
 
-  useEffect(() => { loadOverview(); }, [loadOverview]);
-  useEffect(() => { loadUsers(page); }, [page, loadUsers]);
+  useEffect(() => {
+    if (isInitialized && user?.is_admin) loadOverview();
+  }, [isInitialized, user, loadOverview]);
+
+  useEffect(() => {
+    if (isInitialized && user?.is_admin) loadUsers(page);
+  }, [isInitialized, user, page, loadUsers]);
 
   async function handleUpdate(userId: string, patch: { tier?: string; is_active?: boolean; is_admin?: boolean }) {
     setUpdatingId(userId);
@@ -145,7 +150,7 @@ export default function AdminPage() {
     }
   }
 
-  if (isLoading || !user?.is_admin) {
+  if (!isInitialized || !user?.is_admin) {
     return (
       <div className="min-h-screen bg-bg-primary flex items-center justify-center">
         <div className="font-mono text-text-muted text-sm">Loading…</div>
