@@ -64,7 +64,7 @@ export function DealScoreMeter({ score, grade, verdict, size = "md" }: DealScore
 
   return (
     <div className="flex flex-col items-center gap-6">
-      <div className="relative" style={{ width: sizes.svg, height: sizes.svg * 0.75 }}>
+      <div className="relative" style={{ width: sizes.svg, height: sizes.svg }}>
         <svg
           width={sizes.svg}
           height={sizes.svg}
