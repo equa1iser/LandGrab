@@ -11,7 +11,7 @@ import { useAuthStore } from "@/lib/store/authStore";
 
 function SearchContent() {
   const router = useRouter();
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const { isAuthenticated, isInitialized } = useAuthStore();
   const searchParams = useSearchParams();
   const query = searchParams.get("q") || "";
 
@@ -19,10 +19,10 @@ function SearchContent() {
   const { properties, isLoading: searchLoading } = useSearch(query);
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) router.replace("/auth/login");
-  }, [authLoading, isAuthenticated, router]);
+    if (isInitialized && !isAuthenticated) router.replace("/auth/login");
+  }, [isInitialized, isAuthenticated, router]);
 
-  if (authLoading || !isAuthenticated) return null;
+  if (!isInitialized || !isAuthenticated) return null;
 
   return (
     <div className="mt-14 h-[calc(100vh-3.5rem)] flex flex-col">

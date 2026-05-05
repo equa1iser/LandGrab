@@ -214,22 +214,22 @@ function PropertyHeader({
 
 export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) {
   const router = useRouter();
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const { isAuthenticated, isInitialized } = useAuthStore();
   const { data, isLoading, error } = useProperty(propertyId);
   const { data: priceHistory } = usePriceHistory(propertyId);
   const { canView, viewsUsed, viewsLimit, isUnlimited } = useUsage();
   const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) router.replace("/auth/login");
-  }, [authLoading, isAuthenticated, router]);
+    if (isInitialized && !isAuthenticated) router.replace("/auth/login");
+  }, [isInitialized, isAuthenticated, router]);
 
   const saveMutation = useMutation({
     mutationFn: () => api.saveProperty(propertyId),
     onSuccess: () => setIsSaved(true),
   });
 
-  if (authLoading || !isAuthenticated) return null;
+  if (!isInitialized || !isAuthenticated) return null;
 
   if (isLoading) {
     return (

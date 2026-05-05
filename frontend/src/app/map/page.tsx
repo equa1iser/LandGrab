@@ -8,13 +8,13 @@ import { useAuthStore } from "@/lib/store/authStore";
 
 export default function MapPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, isInitialized } = useAuthStore();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) router.replace("/auth/login");
-  }, [isLoading, isAuthenticated, router]);
+    if (isInitialized && !isAuthenticated) router.replace("/auth/login");
+  }, [isInitialized, isAuthenticated, router]);
 
-  if (isLoading || !isAuthenticated) return null;
+  if (!isInitialized || !isAuthenticated) return null;
 
   return (
     <div className="h-[calc(100vh-3.5rem)] flex flex-col">
