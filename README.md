@@ -8,14 +8,17 @@
 
 ## Features
 
-- **AI Deal Scoring** — Claude-powered analysis blended with rule-based component scores (comps, market timing, neighborhood, growth, tax burden, price trend). Every property gets a 0–100 score, letter grade (A–F), and a plain-English verdict.
-- **LandGrab Estimate (AVM)** — GradientBoosting ML model trained on local Redfin sales data. Shows estimated value vs list price with confidence range.
-- **Interactive Map** — Mapbox dark tiles with property pins color-coded by deal score. Heatmap overlay for price density.
-- **Price & Tax History** — Full historical charts with trend indicators.
-- **Comparable Sales** — Haversine-filtered, similarity-ranked recent sales in the area.
+- **AI Deal Scoring** — Rule-based component scores (comps, market timing, neighborhood, growth, tax burden, price trend) blended 70/30 with Claude AI analysis. Every property gets a 0–100 score, letter grade (A–F), animated circular gauge, and a plain-English verdict. Scores cache 12 hours in the database.
+- **Color-Coded Map Markers** — Mapbox dark tiles with property pins color-coded by deal score (green ≥75, amber 50–74, red <50, cyan unscored, dark green for land parcels). Deal scores are batch-fetched with search results so colors reflect real data on load.
+- **Property Photos & Aerial View** — Displays listing photos when available. Falls back to a Mapbox satellite aerial view using the existing map token when no photos exist.
+- **Price & Tax History** — Full historical charts. Price history extracted from RentCast `raw_data.history` (multi-event per listing including re-lists and price changes). Tax history from ATTOM when available.
+- **Comparable Sales** — Haversine-filtered, multi-signal similarity ranking: sqft (±50%), beds, baths, year built, price/sqft proximity, distance, property type. Returns the 5 best-matched active listings.
 - **Neighborhood Intel** — Crime index, school ratings, walk/transit/bike scores, Census demographic trends.
-- **Live Mortgage Rates** — FRED API rates with built-in payment calculator (adjust down payment %, loan term).
-- **Saved Properties & Alerts** — Bookmark properties, set search criteria, get email alerts on price drops and new listings.
+- **Market Data** — Median price, days on market, months of supply, YoY price change per ZIP code.
+- **Live Mortgage Rates** — FRED API 30yr/15yr rates with built-in payment calculator (adjust down payment %, loan term).
+- **LandGrab Estimate (AVM)** — GradientBoosting ML model trained on local sales data. Shows estimated value vs list price with confidence range.
+- **Search History** — Recent searches persist in localStorage (up to 8 entries) and appear as a dropdown on focus.
+- **Favorites / Watchlist** — Save properties to a watchlist. Saved properties show beds/baths/sqft stats and current price. Accessible via the Watchlist nav tab.
 - **Pluggable Data Sources** — All adapters implement `BaseDataSource`. Paid sources (ATTOM, GreatSchools, Walk Score) slot in with no route changes.
 
 ---
@@ -25,12 +28,12 @@
 | Layer | Choice |
 |---|---|
 | Backend API | Python 3.12 + FastAPI (async) |
-| Database | PostgreSQL 15 + SQLAlchemy (async) + Alembic |
+| Database | PostgreSQL 16 + SQLAlchemy (async) + Alembic |
 | Cache + Queue | Redis 7 + Celery |
 | AI | Claude API (`claude-sonnet-4-6`) + scikit-learn |
 | Frontend | Next.js 14 (App Router) + TypeScript |
 | Styling | Tailwind CSS — custom black ops theme |
-| Maps | Mapbox GL JS + react-map-gl |
+| Maps | Mapbox GL JS (dynamic import, dark-v11 tiles) |
 | Charts | Recharts |
 | State | Zustand + TanStack Query |
 | Infra | Docker + Docker Compose |
@@ -53,18 +56,26 @@ cp .env.example .env
 ```
 
 ```env
-# Required for core functionality
-FRED_API_KEY=           # https://fred.stlouisfed.org/docs/api/api_key.html
-CENSUS_API_KEY=         # https://api.census.gov/data/key_signup.html
-
 # Required for property listings
-RENTCAST_API_KEY=       # https://app.rentcast.io/ (50 free calls/month)
+RENTCAST_API_KEY=           # https://app.rentcast.io/ (50 free calls/month)
 
-# Required for maps
+# Required for maps (browser-side)
 NEXT_PUBLIC_MAPBOX_TOKEN=   # https://account.mapbox.com/ (free tier)
 
-# Required for AI deal scoring
-ANTHROPIC_API_KEY=      # https://console.anthropic.com/
+# Required for mortgage rates
+FRED_API_KEY=               # https://fred.stlouisfed.org/docs/api/api_key.html
+
+# Required for neighborhood demographics
+CENSUS_API_KEY=             # https://api.census.gov/data/key_signup.html
+
+# Optional — AI narrative in deal scoring (falls back to rule-based only)
+ANTHROPIC_API_KEY=          # https://console.anthropic.com/
+
+# Optional — enriches tax history and property details
+ATTOM_API_KEY=              # https://api.attomdata.com/
+
+# Optional — city/ZIP supplemental data
+API_NINJAS_KEY=             # https://api-ninjas.com/
 ```
 
 All keys are optional — adapters degrade gracefully when missing.
@@ -72,7 +83,7 @@ All keys are optional — adapters degrade gracefully when missing.
 ### 2. Start the Stack
 
 ```bash
-docker compose up --build
+docker compose up -d --build
 ```
 
 | Service | URL |
@@ -95,8 +106,14 @@ docker compose exec backend alembic upgrade head
 curl http://localhost:8000/health
 # → {"status":"operational","version":"1.0.0","app":"LandGrab"}
 
-curl "http://localhost:8000/api/v1/properties?city=Austin&state=TX"
+curl "http://localhost:8000/api/v1/properties?city=Tulsa&state=OK"
 curl http://localhost:8000/api/v1/market/rates/current
+```
+
+### 5. Stop the Stack
+
+```bash
+docker compose down
 ```
 
 ---
@@ -107,62 +124,140 @@ curl http://localhost:8000/api/v1/market/rates/current
 LandGrab/
 ├── backend/
 │   ├── app/
-│   │   ├── api/v1/routes/        # properties, search, auth, users, market
-│   │   ├── core/                 # config, database, redis, security (JWT + bcrypt)
-│   │   ├── models/               # SQLAlchemy: user, property, neighborhood, market,
-│   │   │                         #   deal_score, alert, ml (model metrics)
-│   │   ├── schemas/              # Pydantic v2 request/response shapes
+│   │   ├── main.py                       # FastAPI app entry point, lifespan hooks
+│   │   ├── api/
+│   │   │   └── v1/
+│   │   │       ├── router.py             # Route registration
+│   │   │       ├── deps.py               # Shared dependencies (get_db, get_current_user)
+│   │   │       └── routes/
+│   │   │           ├── auth.py           # POST /auth/register|login|refresh|logout
+│   │   │           ├── users.py          # GET|POST|DELETE /users/me|saved-properties|saved-searches
+│   │   │           ├── properties.py     # GET /properties, /properties/{id}, /score, /comps, /avm
+│   │   │           ├── search.py         # GET /search/autocomplete
+│   │   │           └── market.py         # GET /market/rates/current, /market/{zip}
+│   │   ├── core/
+│   │   │   ├── config.py                 # Settings (all API keys, DB URL, JWT secret)
+│   │   │   ├── database.py               # Async SQLAlchemy engine + session factory
+│   │   │   ├── redis_client.py           # Redis cache helpers (get/set/delete)
+│   │   │   └── security.py               # JWT encode/decode, bcrypt password hashing
+│   │   ├── models/
+│   │   │   ├── user.py                   # User, SavedProperty, SavedSearch
+│   │   │   ├── property.py               # Property, PriceHistory, TaxHistory
+│   │   │   ├── neighborhood.py           # NeighborhoodData
+│   │   │   ├── market.py                 # MarketData
+│   │   │   ├── deal_score.py             # DealScore (12h expiry, per-property)
+│   │   │   ├── alert.py                  # PriceAlert
+│   │   │   └── ml.py                     # MLModelMetrics
+│   │   ├── schemas/
+│   │   │   ├── auth.py                   # RegisterRequest, TokenResponse
+│   │   │   ├── user.py                   # UserResponse, SavedPropertyResponse
+│   │   │   └── property.py               # PropertyBase, PropertySummaryResponse,
+│   │   │                                 #   PropertyDetailResponse, ComparableSale,
+│   │   │                                 #   PriceEvent, TaxRecord, DealScoreSummary,
+│   │   │                                 #   NeighborhoodSummary, MarketSummary
 │   │   ├── services/
-│   │   │   ├── data_sources/     # BaseDataSource + DataSourceRegistry + adapters
-│   │   │   │   ├── fred.py       # Mortgage rates from Federal Reserve
-│   │   │   │   ├── census.py     # Demographics from ACS
-│   │   │   │   ├── rentcast.py   # Property data (50 free calls/month)
-│   │   │   │   ├── redfin.py     # Weekly CSV bulk download (sales history)
-│   │   │   │   ├── fhfa.py       # Regional price index (quarterly CSV)
-│   │   │   │   ├── fbi_crime.py  # Crime index by city
-│   │   │   │   └── attom.py      # ATTOM stub (plug in key to activate)
+│   │   │   ├── property_service.py       # Search (1h cache + batch score lookup),
+│   │   │   │                             #   get_detail, price/tax history extraction
+│   │   │   ├── comps_service.py          # Haversine filter + 6-signal similarity rank
+│   │   │   ├── neighborhood_service.py   # Census + FBI Crime fetch + DB cache
+│   │   │   ├── market_service.py         # Market stats fetch + DB cache
+│   │   │   ├── user_service.py           # Saved properties + searches CRUD
+│   │   │   ├── auth_service.py           # Register, login, refresh, logout
+│   │   │   ├── geocoding_service.py      # Autocomplete (API Ninjas + Census fallback)
 │   │   │   ├── ai/
-│   │   │   │   ├── scoring_engine.py   # 6-component rule-based score
-│   │   │   │   ├── claude_analyzer.py  # Claude API with prompt caching
-│   │   │   │   ├── deal_score_service.py  # 70/30 blend, 12h DB cache
-│   │   │   │   └── valuation_model.py  # GradientBoosting AVM
-│   │   │   ├── property_service.py     # Main orchestration (asyncio.gather)
-│   │   │   ├── neighborhood_service.py
-│   │   │   ├── market_service.py
-│   │   │   ├── comps_service.py        # Haversine filter + similarity ranking
-│   │   │   └── user_service.py
-│   │   └── tasks/                # Celery beat tasks
-│   │       ├── data_sync.py      # Redfin CSV weekly sync
-│   │       ├── alerts.py         # Price drop + new listing alerts
-│   │       ├── ml_training.py    # Monthly AVM retrain
-│   │       └── maintenance.py    # Expire old deal scores
-│   ├── alembic/                  # Database migrations
+│   │   │   │   ├── scoring_engine.py     # 6-component rule-based score
+│   │   │   │   ├── claude_analyzer.py    # Claude API with prompt caching
+│   │   │   │   ├── deal_score_service.py # 70/30 blend, selectinload, 12h DB cache
+│   │   │   │   └── valuation_model.py    # GradientBoosting AVM
+│   │   │   ├── alerts/
+│   │   │   │   └── email_service.py      # Price drop + new listing email alerts
+│   │   │   └── data_sources/
+│   │   │       ├── base.py               # BaseDataSource interface
+│   │   │       ├── registry.py           # DataSourceRegistry (priority routing)
+│   │   │       ├── rentcast_adapter.py   # Primary listings source (/listings/sale)
+│   │   │       ├── attom_adapter.py      # ATTOM (tax history, property detail)
+│   │   │       ├── fred_adapter.py       # Mortgage rates
+│   │   │       ├── census_adapter.py     # ACS demographics
+│   │   │       ├── fbi_crime_adapter.py  # Crime index by city
+│   │   │       └── http_client.py        # Shared async HTTP client
+│   │   └── tasks/
+│   │       ├── celery_app.py             # Celery worker + beat config
+│   │       ├── data_sync.py              # Weekly Redfin CSV download
+│   │       ├── alerts.py                 # Price drop + new listing checks
+│   │       ├── maintenance.py            # Expire old deal scores daily
+│   │       └── ml_training.py            # Monthly AVM retrain
+│   ├── alembic/                          # Database migrations
 │   ├── tests/
+│   │   ├── conftest.py                   # Fixtures: client, auth_client, mock_user
+│   │   ├── test_health.py                # Health endpoint
+│   │   ├── test_auth.py                  # Register, login, refresh, logout
+│   │   ├── test_properties.py            # Search, detail, score, comps, AVM
+│   │   ├── test_search.py                # Autocomplete endpoint
+│   │   ├── test_users.py                 # Profile, saved properties, saved searches
+│   │   └── test_market.py                # Mortgage rates, market data by ZIP
+│   ├── scripts/
+│   │   └── test_apis.py                  # Live API diagnostic (pass/fail per adapter)
+│   ├── pytest.ini
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                  # Next.js App Router pages
-│   │   │   ├── page.tsx          # Home — hero search
-│   │   │   ├── search/           # Split-pane results (list + map)
-│   │   │   ├── property/[id]/    # Full property detail
-│   │   │   ├── map/              # Full-screen map view
-│   │   │   ├── dashboard/        # Saved properties + searches
-│   │   │   └── auth/             # Login + register
+│   │   ├── app/
+│   │   │   ├── layout.tsx                # Root layout (Navbar, QueryProvider, fonts)
+│   │   │   ├── page.tsx                  # Home — hero search bar
+│   │   │   ├── globals.css               # Tailwind base + custom utility classes
+│   │   │   ├── search/
+│   │   │   │   └── page.tsx              # Split-pane results (list + Mapbox map)
+│   │   │   ├── property/[id]/
+│   │   │   │   └── page.tsx              # Property detail page (SSR wrapper)
+│   │   │   ├── favorites/
+│   │   │   │   └── page.tsx              # Watchlist — saved properties grid
+│   │   │   ├── map/
+│   │   │   │   └── page.tsx              # Full-screen map view
+│   │   │   └── auth/
+│   │   │       ├── login/page.tsx
+│   │   │       └── register/page.tsx
 │   │   ├── components/
-│   │   │   ├── map/              # PropertyMap, PropertyMarkers, PriceHeatmap
-│   │   │   ├── property/         # All detail panels (price history, comps,
-│   │   │   │                     #   neighborhood, market, rates, AVM, deal score)
-│   │   │   ├── search/           # SearchBar, FilterPanel
-│   │   │   └── ui/               # HudCard, StatBadge, DealScoreMeter
-│   │   └── lib/
-│   │       ├── api-client.ts     # Typed fetch wrapper
-│   │       ├── hooks/            # TanStack Query hooks
-│   │       └── store/            # Zustand stores (auth, search)
-│   ├── tailwind.config.ts        # Black ops color palette + custom fonts
+│   │   │   ├── layout/
+│   │   │   │   └── Navbar.tsx            # Nav links: Search | Map | Watchlist | auth
+│   │   │   ├── search/
+│   │   │   │   ├── SearchBar.tsx         # Input + localStorage history dropdown (8 entries)
+│   │   │   │   ├── FilterPanel.tsx       # Price / beds / type filters
+│   │   │   │   └── PropertyList.tsx      # Search result cards
+│   │   │   ├── property/
+│   │   │   │   ├── PropertyDetailClient.tsx  # Full detail layout + photo hero
+│   │   │   │   ├── PriceHistoryChart.tsx     # Recharts area chart
+│   │   │   │   ├── TaxHistoryPanel.tsx       # Annual tax history table
+│   │   │   │   ├── CompsPanel.tsx            # Comparable sales table
+│   │   │   │   ├── NeighborhoodPanel.tsx     # Crime, schools, walk/transit scores
+│   │   │   │   ├── MarketPanel.tsx           # ZIP market stats
+│   │   │   │   ├── InterestRatesPanel.tsx    # Live rates + payment calculator
+│   │   │   │   ├── DealScorePanel.tsx        # Score breakdown + AI narrative
+│   │   │   │   └── AVMPanel.tsx              # ML valuation estimate
+│   │   │   ├── map/
+│   │   │   │   └── PropertyMap.tsx       # Mapbox GL JS map with color-coded markers
+│   │   │   ├── ui/
+│   │   │   │   ├── HudCard.tsx           # Styled card with HUD label
+│   │   │   │   ├── StatBadge.tsx         # Stat chip component
+│   │   │   │   └── DealScoreMeter.tsx    # Animated circular gauge (score + grade)
+│   │   │   └── providers/
+│   │   │       └── QueryProvider.tsx     # TanStack Query client provider
+│   │   ├── lib/
+│   │   │   ├── api-client.ts             # Axios wrapper (30s timeout), typed methods
+│   │   │   ├── hooks/
+│   │   │   │   ├── useProperty.ts        # useProperty, usePriceHistory, useDealScore
+│   │   │   │   └── useSearch.ts          # useSearch with filter params
+│   │   │   └── store/
+│   │   │       └── authStore.ts          # Zustand auth state (token, user, login/logout)
+│   │   └── __tests__/
+│   │       ├── Navbar.test.tsx           # Nav rendering, auth state, logout
+│   │       ├── SearchBar.test.tsx        # Input, history dropdown, submission
+│   │       └── RegisterPage.test.tsx     # Form fields, validation, API call
+│   ├── tailwind.config.ts               # Black ops palette + Orbitron/JetBrains fonts
+│   ├── vitest.config.ts
 │   └── package.json
 ├── docker-compose.yml
 ├── .env.example
-└── SETUP.md                      # Detailed setup guide
+└── CLAUDE.md
 ```
 
 ---
@@ -170,47 +265,115 @@ LandGrab/
 ## API Reference
 
 ```
-GET  /api/v1/search?q=&type=city|zip|address&filters=...
-GET  /api/v1/search/autocomplete?q=
-GET  /api/v1/properties/{id}                  # Full detail
-GET  /api/v1/properties/{id}/score            # Claude AI deal score (12h cache)
-GET  /api/v1/properties/{id}/comps            # Comparable recent sales
-GET  /api/v1/properties/{id}/price-history
-GET  /api/v1/properties/{id}/avm              # ML valuation estimate
-GET  /api/v1/market/{zip}                     # Area market stats
-GET  /api/v1/market/rates/current             # FRED live mortgage rates
+GET  /health
+
+GET  /api/v1/properties                     # Search (city, state, zip, price, beds, type, limit)
+GET  /api/v1/properties/{id}                # Full detail + price/tax history
+GET  /api/v1/properties/{id}/score          # Deal score (rule-based + Claude, 12h cache)
+GET  /api/v1/properties/{id}/comps          # Top 5 comparable active listings
+GET  /api/v1/properties/{id}/price-history  # Price event timeline
+GET  /api/v1/properties/{id}/avm            # ML valuation estimate
+
+GET  /api/v1/search/autocomplete?q=         # City/ZIP suggestions (min 2 chars)
+
+GET  /api/v1/market/rates/current           # Live 30yr/15yr mortgage rates (FRED)
+GET  /api/v1/market/{zip}                   # Area market stats by ZIP
+
 POST /api/v1/auth/register
 POST /api/v1/auth/login
-GET|POST|DELETE /api/v1/users/saved-properties
-GET|POST|PUT|DELETE /api/v1/users/saved-searches
+POST /api/v1/auth/refresh
+POST /api/v1/auth/logout
+
+GET  /api/v1/users/me
+GET|POST     /api/v1/users/saved-properties
+DELETE       /api/v1/users/saved-properties/{id}
+GET|POST     /api/v1/users/saved-searches
+PUT|DELETE   /api/v1/users/saved-searches/{id}
 ```
 
 Full interactive docs at `http://localhost:8000/docs` when the stack is running.
 
 ---
 
+## Testing
+
+### Backend — pytest (async, no live connections required)
+
+All tests mock the database and external services via `conftest.py` fixtures.
+
+```bash
+# Install test dependencies inside the container
+docker compose exec backend pip install pytest==8.3.3 pytest-asyncio==0.24.0 httpx==0.27.2
+
+# Run all tests
+docker compose exec backend python -m pytest tests/ -v
+
+# Run a specific file
+docker compose exec backend python -m pytest tests/test_properties.py -v
+```
+
+| Test File | Coverage |
+|---|---|
+| `test_health.py` | `GET /health` — status, version, app name |
+| `test_auth.py` | Register (success, duplicate, invalid), login (success, bad creds), refresh, logout |
+| `test_properties.py` | Search (no params, by city, by ZIP, price filter, limit cap), detail (found, not found), score, comps, price-history, AVM |
+| `test_search.py` | Autocomplete (results, min-length validation, empty results) |
+| `test_users.py` | `/me` (auth, unauth), saved properties (list, add, remove), saved searches (list, create, update, delete, not-found) |
+| `test_market.py` | Current rates, market data by ZIP |
+
+**Fixtures** (`tests/conftest.py`):
+- `client` — unauthenticated `AsyncClient` with mocked DB
+- `auth_client` — authenticated client; `get_current_user` returns `mock_user`
+- `mock_user` — pre-built `MagicMock` user object (test@example.com)
+
+### Frontend — vitest
+
+```bash
+cd frontend && npm test            # single run
+cd frontend && npm run test:watch  # watch mode
+```
+
+| Test File | Coverage |
+|---|---|
+| `Navbar.test.tsx` | Renders nav links, conditional auth state, logout |
+| `SearchBar.test.tsx` | Input rendering, initial value, history dropdown, submission |
+| `RegisterPage.test.tsx` | Form fields, validation, API call, error handling |
+
+### Live API Diagnostic
+
+Tests every configured external API and reports pass/fail with sample data:
+
+```bash
+docker compose exec backend python scripts/test_apis.py
+```
+
+---
+
 ## Data Sources
 
-### Free (active in MVP)
+### Active
 
-| Source | Data | Notes |
+| Source | Key | Data |
 |---|---|---|
-| FRED API | 30yr/15yr mortgage rates | Free key, high rate limits |
-| US Census ACS | Demographics, income, population | Free key |
-| FHFA HPI | Regional price trend history | Quarterly CSV |
-| FBI Crime API | Crime index by city | Free REST API |
-| RentCast API | Property details + AVM | 50 calls/month free |
-| Redfin Data Center | Weekly sales CSV | Free bulk download |
+| RentCast | `RENTCAST_API_KEY` | Active listings (`/listings/sale`), property records, price history in `raw_data.history`. 50 calls/month free; quota tracked in Redis. |
+| FRED | `FRED_API_KEY` | 30yr/15yr fixed mortgage rates |
+| US Census ACS | `CENSUS_API_KEY` | Demographics, income, population trends |
+| FBI Crime API | `FBI_CRIME_API_KEY` | Crime index by city |
+| API Ninjas | `API_NINJAS_KEY` | City/ZIP supplemental data for autocomplete |
+| Mapbox | `NEXT_PUBLIC_MAPBOX_TOKEN` | Dark map tiles + satellite aerial property views |
 
-### Paid (plug-and-play when ready)
+### Optional / Paid
 
-| Source | Data | Cost |
+| Source | Key | Data |
 |---|---|---|
-| ATTOM Data | Listings, tax, ownership, 9000+ fields | $95/mo trial |
-| GreatSchools | School ratings | Freemium |
-| Walk Score | Walk/transit/bike scores | Paid |
+| ATTOM | `ATTOM_API_KEY` | Tax history, property detail (trial plan restricts some endpoints) |
+| Anthropic | `ANTHROPIC_API_KEY` | Claude AI narrative in deal scoring (falls back to rule-based only without it) |
 
-Add `ATTOM_API_KEY=your_key` to `.env` and restart — ATTOM auto-activates at higher priority via `DataSourceRegistry`. No code changes needed.
+Add any key to `.env`, then force-recreate to inject it:
+
+```bash
+docker compose up -d --force-recreate backend celery_worker celery_beat
+```
 
 ---
 
@@ -220,21 +383,35 @@ Two-layer approach to balance cost and quality:
 
 **Layer 1 — Rule-based component scores (deterministic, no API cost):**
 
-| Component | Weight | Signal |
-|---|---|---|
-| Price vs Comps | 35% | How far below/above comparable recent sales |
-| Market Timing | 20% | Months of supply, inventory trend |
-| Neighborhood | 20% | Crime grade, school rating, walkability |
-| Growth Potential | 15% | Population trend, permit data |
-| Tax Burden | 5% | Effective tax rate vs area median |
-| Price Trend | 5% | YoY price change direction |
+| Component | Signal |
+|---|---|
+| Price vs Comps | How far below/above comparable active listings |
+| Market Timing | Months of supply, inventory trend |
+| Neighborhood | Crime grade, school rating, walkability |
+| Growth Potential | Population trend, permit data |
+| Tax Burden | Effective tax rate vs area median |
+| Price Trend | YoY price change direction |
 
-**Layer 2 — Claude analysis (30% of final score):**
-- Input: structured property briefing formatted as prose
+**Layer 2 — Claude analysis (30% of final score, optional):**
+- Input: structured property briefing
 - Output: `{adjusted_score, grade, verdict, summary, key_factors, risks, opportunities}`
-- System prompt uses Anthropic prompt caching (ephemeral) to reduce token cost
 - Final score = rule-based × 0.70 + Claude × 0.30
-- Cached in database 12 hours per property
+- Cached in `deal_scores` table for 12 hours per property
+- Falls back to 100% rule-based when `ANTHROPIC_API_KEY` is not set
+
+---
+
+## Map Marker Colors
+
+| Color | Meaning |
+|---|---|
+| `#00ff41` neon green | Deal score ≥ 75 — strong deal |
+| `#f59e0b` amber | Deal score 50–74 — moderate |
+| `#ef4444` red | Deal score < 50 — weak |
+| `#00d4ff` cyan | No score yet (visit property page to compute) |
+| `#2e7d32` dark green | Land parcel |
+
+Deal scores are batch-fetched alongside search results so colors reflect actual scores on initial load.
 
 ---
 
@@ -243,39 +420,44 @@ Two-layer approach to balance cost and quality:
 | Task | Schedule | Job |
 |---|---|---|
 | `sync_redfin_weekly` | Monday 3am | Download + parse Redfin sales CSV |
-| `check_price_drops` | Every 6h | Alert users when saved property drops |
-| `check_new_listings` | Every 2h | Alert users when saved search has new matches |
+| `check_price_drops` | Every 6h | Alert users when a saved property price drops |
+| `check_new_listings` | Every 2h | Alert users when a saved search has new matches |
 | `expire_old_scores` | Daily 2am | Clear expired deal scores for recompute |
 | `retrain_avm` | Monthly | Retrain GradientBoosting AVM on latest sales data |
 
-Run tasks manually during development:
+Run tasks manually:
 
 ```bash
-docker compose exec celery_worker celery -A app.tasks.celery_app call app.tasks.data_sync.sync_redfin_weekly
 docker compose exec celery_worker celery -A app.tasks.celery_app call app.tasks.maintenance.expire_old_scores
+docker compose exec celery_worker celery -A app.tasks.celery_app call app.tasks.data_sync.sync_redfin_weekly
 ```
 
 ---
 
 ## Development
 
-### Backend only (hot reload via Docker volume mount)
+### Hot reload (default)
+The backend and frontend both hot-reload via Docker volume mounts. Just edit files locally — changes reflect immediately without a restart.
+
+### After adding API keys
 ```bash
-docker compose up db redis backend
+# Edit .env, then force-recreate to inject new env vars:
+docker compose up -d --force-recreate backend celery_worker celery_beat
+
+# Verify a key loaded:
+docker compose exec backend python -c "from app.core.config import settings; print(settings.RENTCAST_API_KEY[:4])"
 ```
+
+### Wipe stale property cache
+If search returns outdated data from a previous adapter version:
+```bash
+docker compose exec db psql -U landgrab -d landgrab -c "DELETE FROM properties;"
+```
+The next search re-fetches fresh data from RentCast.
 
 ### Frontend locally (faster HMR)
 ```bash
-cd frontend
-npm install
-npm run dev
-```
-
-### When you add API keys
-```bash
-# Edit .env, then:
-docker compose restart backend celery_worker celery_beat
-# No code changes needed
+cd frontend && npm install && npm run dev
 ```
 
 ---
@@ -283,14 +465,14 @@ docker compose restart backend celery_worker celery_beat
 ## Roadmap
 
 - [x] Phase 1 — Docker infrastructure + database schema
-- [x] Phase 2 — Data source adapters (FRED, Census, RentCast, Redfin, FBI Crime)
-- [x] Phase 3 — Frontend shell + Mapbox map
-- [x] Phase 4 — Property detail page (all panels)
-- [x] Phase 5 — AI deal scoring (Claude + rule-based blend)
+- [x] Phase 2 — Data source adapters (FRED, Census, RentCast, FBI Crime, API Ninjas)
+- [x] Phase 3 — Frontend shell + Mapbox map (color-coded markers, search history, watchlist)
+- [x] Phase 4 — Property detail page (photos, price/tax history, comps, neighborhood, market, rates)
+- [x] Phase 5 — AI deal scoring (Claude + rule-based blend, animated gauge, score colors on map)
 - [x] Phase 6 — Auth + saved properties + email alerts
 - [ ] Phase 7 — ML valuation model (AVM training pipeline)
 - [ ] Phase 8 — Mobile app (React Native)
-- [ ] Phase 9 — ATTOM integration (paid data tier)
+- [ ] Phase 9 — ATTOM full integration (paid data tier)
 
 ---
 
