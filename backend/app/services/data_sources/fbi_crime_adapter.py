@@ -4,6 +4,7 @@ from datetime import datetime
 from app.services.data_sources.base import BaseDataSource
 from app.services.data_sources.http_client import create_client, retry_on_http_error
 from app.core.redis_client import cache_get, cache_set, NEIGHBORHOOD_TTL
+from app.core.config import settings
 
 FBI_BASE = "https://api.usa.gov/crime/fbi/cde"
 
@@ -28,45 +29,51 @@ class FBICrimeAdapter(BaseDataSource):
                 return None
         return None
 
-    @retry_on_http_error
     async def _fetch_offense_data(self, client, state: str) -> Optional[dict]:
-        resp = await client.get(
-            "/summarized/state/offenses",
-            params={
-                "state_abbr": state.upper(),
-                "data_year": "2022",
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        # Fetch the last 12 months of rates for violent and property crime
+        params: dict = {"from": "01-2022", "to": "12-2022"}
+        if settings.FBI_CRIME_API_KEY:
+            params["API_KEY"] = settings.FBI_CRIME_API_KEY
 
-        if not data:
+        state_upper = state.upper()
+        violent_rate = await self._mean_monthly_rate(client, state_upper, "violent-crime", params)
+        property_rate = await self._mean_monthly_rate(client, state_upper, "property-crime", params)
+
+        if violent_rate is None and property_rate is None:
             return None
 
-        # Compute a simple crime index from violent + property crime rates
-        total_crimes = 0
-        population = 0
-        for entry in data:
-            total_crimes += entry.get("actual", 0)
-            population = max(population, entry.get("population", 0))
+        # Combined annual rate per 100k (monthly mean × 12)
+        monthly_combined = (violent_rate or 0) + (property_rate or 0)
+        annual_rate = monthly_combined * 12
 
-        if population == 0:
-            return None
-
-        crime_rate_per_100k = (total_crimes / population) * 100_000
-        # Normalize to 0-100 index (national avg ~2,200 per 100k for violent + property)
-        crime_index = min(round((crime_rate_per_100k / 5000) * 100, 1), 100)
+        # Normalize to 0-100 index; national avg ~2,700/yr per 100k
+        crime_index = min(round((annual_rate / 5000) * 100, 1), 100)
         grade = self._index_to_grade(crime_index)
 
-        result = {
+        return {
             "crime_index": crime_index,
             "crime_grade": grade,
-            "crime_rate_per_100k": round(crime_rate_per_100k, 1),
-            "source": "FBI UCR",
+            "crime_rate_per_100k": round(annual_rate, 1),
+            "violent_rate_per_100k": round((violent_rate or 0) * 12, 1),
+            "property_rate_per_100k": round((property_rate or 0) * 12, 1),
+            "source": "FBI CDE",
             "state": state,
             "fetched_at": datetime.utcnow().isoformat(),
         }
-        return result
+
+    async def _mean_monthly_rate(self, client, state: str, offense: str, params: dict) -> Optional[float]:
+        try:
+            resp = await client.get(f"/summarized/state/{state}/{offense}", params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            rates_by_period: dict = {}
+            for key, monthly in (data.get("offenses", {}).get("rates", {}) or {}).items():
+                rates_by_period.update(monthly)
+            if not rates_by_period:
+                return None
+            return sum(rates_by_period.values()) / len(rates_by_period)
+        except Exception:
+            return None
 
     def _index_to_grade(self, index: float) -> str:
         if index <= 20:

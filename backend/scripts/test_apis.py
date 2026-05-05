@@ -191,22 +191,74 @@ async def test_attom():
 async def test_fbi_crime():
     section("FBI Crime Data Explorer")
     if not settings.FBI_CRIME_API_KEY:
-        skip("agency lookup", "FBI_CRIME_API_KEY not configured"); return
+        skip("agency/byStateAbbr",     "FBI_CRIME_API_KEY not configured")
+        skip("summarized/state/offenses", "FBI_CRIME_API_KEY not configured")
+        skip("summarized/state/participation", "FBI_CRIME_API_KEY not configured")
+        skip("FBICrimeAdapter.get_crime_data()", "FBI_CRIME_API_KEY not configured")
+        return
 
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.get(
-                "https://api.usa.gov/crime/fbi/cde/agency/byStateAbbr/TX",
-                params={"API_KEY": settings.FBI_CRIME_API_KEY},
-            )
+    key_param = {"API_KEY": settings.FBI_CRIME_API_KEY}
+    base = "https://api.usa.gov/crime/fbi/cde"
+
+    date_params = {**key_param, "from": "01-2022", "to": "12-2022"}
+
+    async with httpx.AsyncClient(base_url=base, timeout=15) as client:
+
+        # 1 — Agency list by state (confirms key + connectivity)
+        try:
+            r = await client.get("/agency/byStateAbbr/TX", params=key_param)
             if r.status_code == 200:
                 agencies = r.json()
-                count = len(agencies) if isinstance(agencies, list) else "?"
-                ok("agency/byStateAbbr", f"{count} TX agencies returned")
+                count = sum(len(v) for v in agencies.values()) if isinstance(agencies, dict) else len(agencies)
+                ok("agency/byStateAbbr/TX", f"{count} TX agencies")
             else:
-                fail("agency/byStateAbbr", f"HTTP {r.status_code}: {r.text[:120]}")
+                fail("agency/byStateAbbr/TX", f"HTTP {r.status_code}: {r.text[:120]}")
+        except Exception as e:
+            fail("agency/byStateAbbr/TX", str(e))
+
+        # 2 — Violent crime rates by state (primary adapter endpoint)
+        try:
+            r = await client.get("/summarized/state/TX/violent-crime", params=date_params)
+            if r.status_code == 200:
+                rates = r.json().get("offenses", {}).get("rates", {})
+                months = {k: v for d in rates.values() for k, v in d.items()}
+                avg = round(sum(months.values()) / len(months), 2) if months else None
+                ok("summarized/state/TX/violent-crime",
+                   f"{len(months)} months, avg {avg}/100k/mo" if avg else "no data")
+            else:
+                fail("summarized/state/TX/violent-crime", f"HTTP {r.status_code}: {r.text[:120]}")
+        except Exception as e:
+            fail("summarized/state/TX/violent-crime", str(e))
+
+        # 3 — Property crime rates by state (secondary adapter endpoint)
+        try:
+            r = await client.get("/summarized/state/TX/property-crime", params=date_params)
+            if r.status_code == 200:
+                rates = r.json().get("offenses", {}).get("rates", {})
+                months = {k: v for d in rates.values() for k, v in d.items()}
+                avg = round(sum(months.values()) / len(months), 2) if months else None
+                ok("summarized/state/TX/property-crime",
+                   f"{len(months)} months, avg {avg}/100k/mo" if avg else "no data")
+            else:
+                fail("summarized/state/TX/property-crime", f"HTTP {r.status_code}: {r.text[:120]}")
+        except Exception as e:
+            fail("summarized/state/TX/property-crime", str(e))
+
+    # 4 — End-to-end adapter test: verifies crime_index is computed correctly
+    try:
+        from app.services.data_sources.fbi_crime_adapter import FBICrimeAdapter
+        adapter = FBICrimeAdapter()
+        result = await adapter.get_crime_data(city="Austin", state="TX")
+        if result:
+            idx   = result.get("crime_index")
+            grade = result.get("crime_grade")
+            rate  = result.get("crime_rate_per_100k")
+            ok("FBICrimeAdapter.get_crime_data()",
+               f"crime_index={idx}, grade={grade}, rate_per_100k={rate}")
+        else:
+            fail("FBICrimeAdapter.get_crime_data()", "returned None — check adapter logic")
     except Exception as e:
-        fail("FBI Crime", str(e))
+        fail("FBICrimeAdapter.get_crime_data()", str(e))
 
 
 # ── API Ninjas ───────────────────────────────────────────────────────────────
