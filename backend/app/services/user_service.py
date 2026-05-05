@@ -4,8 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.alert import SavedProperty, SavedSearch
+from app.models.user import User
 from app.models.property import Property
-from app.schemas.user import SavedPropertyCreate, SavedSearchCreate, SavedSearchUpdate
+from app.schemas.user import SavedPropertyCreate, SavedSearchCreate, SavedSearchUpdate, UserProfileUpdate, UserPasswordUpdate, UserPreferences
 
 
 class UserService:
@@ -141,3 +142,28 @@ class UserService:
         if ss:
             await self.db.delete(ss)
             await self.db.commit()
+
+    async def update_profile(self, user: User, data: UserProfileUpdate) -> User:
+        if data.full_name is not None:
+            user.full_name = data.full_name
+        if data.email is not None:
+            user.email = data.email
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+    async def update_preferences(self, user: User, prefs: dict) -> User:
+        current = user.preferences or {}
+        merged = {**current, **prefs}
+        user.preferences = merged
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+    async def change_password(self, user: User, data: UserPasswordUpdate) -> bool:
+        from app.core.security import verify_password, get_password_hash as hash_password
+        if not verify_password(data.current_password, user.password_hash):
+            return False
+        user.password_hash = hash_password(data.new_password)
+        await self.db.commit()
+        return True

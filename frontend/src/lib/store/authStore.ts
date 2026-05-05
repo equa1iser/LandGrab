@@ -3,11 +3,20 @@
 import { create } from "zustand";
 import { api } from "@/lib/api-client";
 
+interface UserPreferences {
+  notify_price_drops: boolean;
+  notify_new_listings: boolean;
+  alert_frequency: string;
+  marketing_emails: boolean;
+}
+
 interface User {
   id: string;
   email: string;
   full_name: string;
   tier: string;
+  preferences: UserPreferences;
+  created_at: string;
 }
 
 interface AuthStore {
@@ -19,6 +28,7 @@ interface AuthStore {
   register: (email: string, password: string, fullName: string) => Promise<void>;
   logout: () => Promise<void>;
   loadUser: () => Promise<void>;
+  updateUser: (user: User) => void;
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
@@ -73,4 +83,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       set({ user: null, isAuthenticated: false });
     }
   },
+
+  updateUser: (user: User) => set({ user }),
 }));

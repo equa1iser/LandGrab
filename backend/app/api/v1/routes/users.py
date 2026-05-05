@@ -5,7 +5,7 @@ from typing import Annotated
 from app.core.database import get_db
 from app.api.v1.deps import get_current_user
 from app.models.user import User
-from app.schemas.user import UserResponse, SavedPropertyCreate, SavedSearchCreate, SavedSearchUpdate
+from app.schemas.user import UserResponse, SavedPropertyCreate, SavedSearchCreate, SavedSearchUpdate, UserProfileUpdate, UserPasswordUpdate
 
 router = APIRouter()
 
@@ -15,6 +15,35 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: CurrentUser):
     return current_user
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(
+    data: UserProfileUpdate, current_user: CurrentUser, db: AsyncSession = Depends(get_db)
+):
+    from app.services.user_service import UserService
+    service = UserService(db)
+    return await service.update_profile(current_user, data)
+
+
+@router.put("/preferences", response_model=UserResponse)
+async def update_preferences(
+    prefs: dict, current_user: CurrentUser, db: AsyncSession = Depends(get_db)
+):
+    from app.services.user_service import UserService
+    service = UserService(db)
+    return await service.update_preferences(current_user, prefs)
+
+
+@router.put("/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    data: UserPasswordUpdate, current_user: CurrentUser, db: AsyncSession = Depends(get_db)
+):
+    from app.services.user_service import UserService
+    service = UserService(db)
+    ok = await service.change_password(current_user, data)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
 
 
 @router.get("/saved-properties")

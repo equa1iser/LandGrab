@@ -96,4 +96,16 @@ export const api = {
 
   createSavedSearch: (name: string, searchParams: object) =>
     apiClient.post("/users/saved-searches", { name, search_params: searchParams }).then((r) => r.data),
+
+  updateProfile: (data: { full_name?: string; email?: string }) =>
+    apiClient.patch("/users/me", data).then((r) => r.data),
+
+  updatePreferences: (prefs: Record<string, unknown>) =>
+    apiClient.put("/users/preferences", prefs).then((r) => r.data),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiClient.put("/users/password", {
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
 };

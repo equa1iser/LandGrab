@@ -1,6 +1,13 @@
-from pydantic import BaseModel, UUID4
+from pydantic import BaseModel, UUID4, EmailStr
 from typing import Optional
 from datetime import datetime
+
+
+class UserPreferences(BaseModel):
+    notify_price_drops: bool = True
+    notify_new_listings: bool = True
+    alert_frequency: str = "daily"  # "immediate" | "daily" | "weekly"
+    marketing_emails: bool = False
 
 
 class UserResponse(BaseModel):
@@ -9,9 +16,20 @@ class UserResponse(BaseModel):
     full_name: str
     tier: str
     is_active: bool
+    preferences: UserPreferences = UserPreferences()
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class UserProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+
+class UserPasswordUpdate(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class SavedPropertyCreate(BaseModel):

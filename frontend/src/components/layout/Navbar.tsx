@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, Bell, User, Map, Heart, LogOut } from "lucide-react";
+import { Search, Bell, User, Map, Heart, LogOut, Settings } from "lucide-react";
 import { clsx } from "clsx";
 import { useAuthStore } from "@/lib/store/authStore";
 
@@ -36,21 +36,24 @@ export function Navbar() {
 
         {/* Nav links */}
         <div className="hidden md:flex items-center gap-6 font-mono text-xs uppercase tracking-widest">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={clsx(
-                "flex items-center gap-1.5 transition-colors duration-200",
-                pathname === link.href
-                  ? "text-accent-green"
-                  : "text-text-muted hover:text-text-secondary"
-              )}
-            >
-              <link.icon className="w-3.5 h-3.5" />
-              {link.label}
-            </Link>
-          ))}
+          {NAV_LINKS.map((link) => {
+            if (link.authOnly && !isAuthenticated) return null;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={clsx(
+                  "flex items-center gap-1.5 transition-colors duration-200",
+                  pathname === link.href
+                    ? "text-accent-green"
+                    : "text-text-muted hover:text-text-secondary"
+                )}
+              >
+                <link.icon className="w-3.5 h-3.5" />
+                {link.label}
+              </Link>
+            );
+          })}
         </div>
 
         {/* Right side */}
@@ -61,9 +64,18 @@ export function Navbar() {
 
           {isAuthenticated && user ? (
             <div className="flex items-center gap-3">
-              <span className="hidden sm:block font-mono text-xs text-accent-green border border-accent-green/30 px-2 py-1">
+              <Link
+                href="/profile"
+                className={clsx(
+                  "hidden sm:flex items-center gap-1.5 font-mono text-xs border px-2 py-1 transition-colors",
+                  pathname === "/profile"
+                    ? "border-accent-green text-accent-green"
+                    : "border-accent-green/30 text-accent-green hover:border-accent-green"
+                )}
+              >
+                <Settings className="w-3 h-3" />
                 {user.full_name.split(" ")[0].toUpperCase()}
-              </span>
+              </Link>
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-4 py-1.5 border border-border-subtle
@@ -90,7 +102,7 @@ export function Navbar() {
 }
 
 const NAV_LINKS = [
-  { href: "/search", label: "Search", icon: Search },
-  { href: "/map", label: "Map", icon: Map },
-  { href: "/favorites", label: "Watchlist", icon: Heart },
+  { href: "/search", label: "Search", icon: Search, authOnly: false },
+  { href: "/map", label: "Map", icon: Map, authOnly: false },
+  { href: "/favorites", label: "Watchlist", icon: Heart, authOnly: true },
 ];
