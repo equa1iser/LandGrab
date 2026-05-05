@@ -97,9 +97,20 @@ class ScoringEngine:
         if not neighborhood:
             return 50
         scores = []
-        crime_index = neighborhood.get("crime_index")
-        if crime_index is not None:
-            scores.append(clamp(100 - float(crime_index)))
+
+        # Prefer raw FBI rates over normalized index — more precise
+        violent = neighborhood.get("violent_rate_per_100k")
+        prop_crime = neighborhood.get("property_rate_per_100k")
+        if violent is not None and prop_crime is not None:
+            # National avg: violent ~370, property ~2100 per 100k/yr
+            # Score 80 at half-national, 20 at double-national, linear
+            violent_score = clamp(80 - (float(violent) / 370 - 1) * 60)
+            property_score = clamp(80 - (float(prop_crime) / 2100 - 1) * 60)
+            scores.append((violent_score + property_score) / 2)
+        else:
+            crime_index = neighborhood.get("crime_index")
+            if crime_index is not None:
+                scores.append(clamp(100 - float(crime_index)))
 
         school_rating = neighborhood.get("school_rating_avg")
         if school_rating is not None:

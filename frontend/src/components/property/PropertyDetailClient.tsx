@@ -7,6 +7,7 @@ import { PriceHistoryChart } from "./PriceHistoryChart";
 import { TaxHistoryPanel } from "./TaxHistoryPanel";
 import { CompsPanel } from "./CompsPanel";
 import { NeighborhoodPanel } from "./NeighborhoodPanel";
+import { CrimePanel } from "./CrimePanel";
 import { MarketPanel } from "./MarketPanel";
 import { InterestRatesPanel } from "./InterestRatesPanel";
 import { DealScorePanel } from "./DealScorePanel";
@@ -262,8 +263,9 @@ export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) 
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <NeighborhoodPanel data={data.neighborhood} />
-              <MarketPanel data={data.market} zip={prop.zip_code} />
+              <CrimePanel data={data.neighborhood} />
             </div>
+            <MarketPanel data={data.market} zip={prop.zip_code} />
             <InterestRatesPanel price={prop.current_price} />
           </div>
 

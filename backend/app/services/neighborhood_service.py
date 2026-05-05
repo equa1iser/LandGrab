@@ -68,9 +68,13 @@ class NeighborhoodService:
     def _to_dict(self, record: Optional[NeighborhoodData]) -> Optional[dict]:
         if not record:
             return None
+        fbi = (record.raw_sources or {}).get("fbi_crime", {}) if record.raw_sources else {}
         return {
             "crime_index": record.crime_index,
             "crime_grade": record.crime_grade,
+            "crime_rate_per_100k": fbi.get("crime_rate_per_100k"),
+            "violent_rate_per_100k": fbi.get("violent_rate_per_100k"),
+            "property_rate_per_100k": fbi.get("property_rate_per_100k"),
             "median_household_income": record.median_household_income,
             "population": record.population,
             "population_growth_pct": record.population_growth_pct,

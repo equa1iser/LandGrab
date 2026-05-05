@@ -1,11 +1,8 @@
 import { HudCard } from "@/components/ui/HudCard";
 import { StatBadge } from "@/components/ui/StatBadge";
-import { Shield, GraduationCap, Footprints, Bus, DollarSign, Users } from "lucide-react";
-import { clsx } from "clsx";
+import { GraduationCap, Footprints, Bus } from "lucide-react";
 
 interface Neighborhood {
-  crime_index?: number;
-  crime_grade?: string;
   median_household_income?: number;
   population?: number;
   population_growth_pct?: number;
@@ -17,22 +14,6 @@ interface Neighborhood {
 
 interface NeighborhoodPanelProps {
   data?: Neighborhood;
-}
-
-function GradeChip({ grade }: { grade?: string }) {
-  if (!grade) return null;
-  const colors: Record<string, string> = {
-    A: "bg-accent-green/20 text-accent-green border-accent-green/40",
-    B: "bg-blue-500/20 text-blue-400 border-blue-400/40",
-    C: "bg-accent-amber/20 text-accent-amber border-accent-amber/40",
-    D: "bg-orange-500/20 text-orange-400 border-orange-400/40",
-    F: "bg-accent-red/20 text-accent-red border-accent-red/40",
-  };
-  return (
-    <span className={clsx("font-display font-bold text-sm px-2 py-0.5 border", colors[grade] || colors.C)}>
-      {grade}
-    </span>
-  );
 }
 
 function ScoreBar({ value, max = 100, color = "#00ff41" }: { value?: number; max?: number; color?: string }) {
@@ -62,26 +43,6 @@ export function NeighborhoodPanel({ data }: NeighborhoodPanelProps) {
   return (
     <HudCard label="NEIGHBORHOOD" className="p-6 pt-10">
       <div className="grid grid-cols-1 gap-4">
-
-        {/* Crime */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Shield className="w-4 h-4 text-text-muted flex-shrink-0" />
-            <div>
-              <div className="font-mono text-xs text-text-muted uppercase tracking-wider">Safety</div>
-              <div className="font-semibold text-sm text-text-primary mt-0.5">
-                Crime Index: {data.crime_index != null ? `${data.crime_index}/100` : "—"}
-              </div>
-              <div className="mt-1.5 w-40">
-                <ScoreBar
-                  value={data.crime_index !== undefined ? 100 - data.crime_index : undefined}
-                  color="#00ff41"
-                />
-              </div>
-            </div>
-          </div>
-          <GradeChip grade={data.crime_grade} />
-        </div>
 
         {/* Schools */}
         {data.school_rating_avg != null && (
