@@ -338,7 +338,7 @@ export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) 
               </ProGate>
             </div>
             <ProGate locked={locked}>
-              <MarketPanel data={data.market} zip={prop.zip_code} />
+              <MarketPanel data={data.market} zip={prop.zip_code} propertyType={prop.property_type} />
             </ProGate>
             <ProGate locked={locked}>
               <InterestRatesPanel price={prop.current_price} />

@@ -19,13 +19,18 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// On 401, clear auth state
+// On 401, clear tokens and sync auth store so all pages redirect consistently
 apiClient.interceptors.response.use(
   (res) => res,
   (error) => {
     if (error.response?.status === 401 && typeof window !== "undefined") {
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
+      // Dynamic import avoids circular dep (authStore imports api-client).
+      // By the time a 401 fires, the module is already cached so this resolves instantly.
+      import("@/lib/store/authStore").then(({ useAuthStore }) => {
+        useAuthStore.setState({ user: null, accessToken: null, isAuthenticated: false, isInitialized: true });
+      });
     }
     return Promise.reject(error);
   }

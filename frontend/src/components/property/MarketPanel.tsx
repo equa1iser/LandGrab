@@ -17,6 +17,7 @@ interface MarketData {
 interface MarketPanelProps {
   data?: MarketData;
   zip?: string;
+  propertyType?: string;
 }
 
 function MarketTemperature({ months }: { months?: number }) {
@@ -46,7 +47,8 @@ function MarketTemperature({ months }: { months?: number }) {
   );
 }
 
-export function MarketPanel({ data, zip }: MarketPanelProps) {
+export function MarketPanel({ data, zip, propertyType }: MarketPanelProps) {
+  const isLand = propertyType === "land";
   if (!data) {
     return (
       <HudCard label="MARKET CONDITIONS" className="p-6 pt-10">
@@ -77,11 +79,13 @@ export function MarketPanel({ data, zip }: MarketPanelProps) {
             value={data.median_price ? `$${(data.median_price / 1000).toFixed(0)}k` : undefined}
             size="sm"
           />
-          <StatBadge
-            label="Price / sqft"
-            value={data.price_per_sqft ? `$${data.price_per_sqft.toFixed(0)}` : undefined}
-            size="sm"
-          />
+          {!isLand && (
+            <StatBadge
+              label="Price / sqft"
+              value={data.price_per_sqft ? `$${data.price_per_sqft.toFixed(0)}` : undefined}
+              size="sm"
+            />
+          )}
           <StatBadge
             label="Days on Market"
             value={data.median_days_on_market?.toFixed(0)}
