@@ -114,13 +114,39 @@ async def analyze_with_claude(
     component_scores: dict,
     composite_score: int,
 ) -> Optional[dict]:
-    if not settings.ANTHROPIC_API_KEY:
+    if settings.GROQ_API_KEY:
+        return await _analyze_with_groq(property_briefing)
+    if settings.ANTHROPIC_API_KEY:
+        return await _analyze_with_anthropic(property_briefing)
+    return None
+
+
+async def _analyze_with_groq(property_briefing: str) -> Optional[dict]:
+    try:
+        from groq import AsyncGroq
+        client = AsyncGroq(api_key=settings.GROQ_API_KEY)
+        response = await client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            max_tokens=1024,
+            temperature=0.1,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"Analyze this property and provide your assessment:\n\n{property_briefing}"},
+            ],
+        )
+        text = response.choices[0].message.content.strip()
+        # Open-source models sometimes wrap JSON in ```json ... ``` fences
+        if text.startswith("```"):
+            text = text.split("```")[1].lstrip("json").strip()
+        return json.loads(text)
+    except Exception:
         return None
 
+
+async def _analyze_with_anthropic(property_briefing: str) -> Optional[dict]:
     try:
         import anthropic
         client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
-
         response = await client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1024,
@@ -138,9 +164,7 @@ async def analyze_with_claude(
                 }
             ],
         )
-
         text = response.content[0].text.strip()
         return json.loads(text)
-
     except Exception:
         return None

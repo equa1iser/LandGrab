@@ -38,6 +38,7 @@ class Settings(BaseSettings):
 
     # AI
     ANTHROPIC_API_KEY: Optional[str] = None
+    GROQ_API_KEY: Optional[str] = None
 
     # Maps
     NEXT_PUBLIC_MAPBOX_TOKEN: Optional[str] = None
