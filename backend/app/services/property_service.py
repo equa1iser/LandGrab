@@ -12,6 +12,7 @@ from app.schemas.property import PropertyDetailResponse, PropertySummaryResponse
 from app.services.data_sources.registry import get_registry
 from app.services.neighborhood_service import NeighborhoodService
 from app.services.market_service import MarketService
+from app.core.redis_client import DB_SEARCH_FRESHNESS, DB_ADDRESS_FRESHNESS
 
 
 async def _noop():
@@ -187,8 +188,6 @@ class PropertyService:
         min_price=None, max_price=None, beds=None, baths=None,
         property_type=None, limit=20,
     ) -> list[PropertySummaryResponse]:
-        cache_ttl = timedelta(hours=1)
-
         query = select(Property)
         if zip_code:
             query = query.where(Property.zip_code == zip_code)
@@ -208,7 +207,7 @@ class PropertyService:
         cached = result.scalars().all()
 
         cache_fresh = any(
-            p.last_synced_at and (datetime.utcnow() - p.last_synced_at) < cache_ttl
+            p.last_synced_at and (datetime.utcnow() - p.last_synced_at) < DB_SEARCH_FRESHNESS
             for p in cached
         )
 
@@ -289,7 +288,7 @@ class PropertyService:
         prop = result.scalar_one_or_none()
 
         if prop and prop.last_synced_at and (
-            datetime.utcnow() - prop.last_synced_at < timedelta(hours=1)
+            datetime.utcnow() - prop.last_synced_at < DB_ADDRESS_FRESHNESS
         ):
             return prop
 

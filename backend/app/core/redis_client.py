@@ -1,15 +1,21 @@
 import json
+from datetime import timedelta
 from typing import Any, Optional
 import redis.asyncio as aioredis
 from app.core.config import settings
 
 # Cache TTL constants (seconds)
-PROPERTY_TTL = 3600        # 1 hour
-NEIGHBORHOOD_TTL = 86400   # 24 hours
-MARKET_TTL = 3600          # 1 hour
-AI_SCORE_TTL = 43200       # 12 hours
-RATES_TTL = 3600           # 1 hour
-AUTOCOMPLETE_TTL = 300     # 5 minutes
+PROPERTY_TTL     = 48 * 3600  # 48 hours — individual property records
+SEARCH_TTL       = 24 * 3600  # 24 hours — search result sets (keyed by query params)
+NEIGHBORHOOD_TTL = 86400       # 24 hours
+MARKET_TTL       = 24 * 3600  # 24 hours — market/zip stats
+AI_SCORE_TTL     = 43200       # 12 hours
+RATES_TTL        = 3600        # 1 hour   — interest rates change frequently
+AUTOCOMPLETE_TTL = 300         # 5 minutes
+
+# DB-level freshness thresholds — how old a DB record can be before we re-fetch
+DB_SEARCH_FRESHNESS  = timedelta(hours=24)  # used in property_service.search()
+DB_ADDRESS_FRESHNESS = timedelta(hours=24)  # used in get_or_fetch_by_address()
 
 _redis_client: Optional[aioredis.Redis] = None
 

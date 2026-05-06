@@ -4,7 +4,10 @@ from datetime import datetime
 from app.services.data_sources.base import BaseDataSource, QuotaExceededException
 from app.services.data_sources.http_client import create_client, retry_on_http_error
 from app.core.config import settings
-from app.core.redis_client import cache_get, cache_set, cache_incr, cache_expire, PROPERTY_TTL
+from app.core.redis_client import (
+    cache_get, cache_set, cache_incr, cache_expire,
+    PROPERTY_TTL, SEARCH_TTL, MARKET_TTL,
+)
 
 RENTCAST_BASE = "https://api.rentcast.io/v1"
 MONTHLY_QUOTA = 50
@@ -124,7 +127,7 @@ class RentCastAdapter(BaseDataSource):
                     "median_days_on_market": sale.get("medianDaysOnMarket"),
                     "sales_volume_30d": sale.get("totalListings"),
                 }
-                await cache_set(cache_key, result, ttl=24 * 3600)
+                await cache_set(cache_key, result, ttl=MARKET_TTL)
                 return result
             except Exception:
                 return {}
@@ -163,6 +166,23 @@ class RentCastAdapter(BaseDataSource):
         if not settings.RENTCAST_API_KEY:
             return []
 
+        # Cache by a deterministic hash of all search params — avoids repeat API
+        # calls for the same query within the 24h window.
+        import hashlib
+        raw_key = "&".join(f"{k}={v}" for k, v in sorted({
+            "city": (city or "").lower().strip(),
+            "state": (state or "").upper().strip(),
+            "zip": zip_code or "",
+            "min_p": str(min_price or ""),
+            "max_p": str(max_price or ""),
+            "beds": str(beds or ""),
+            "limit": str(limit),
+        }.items()))
+        cache_key = f"rentcast:search:{hashlib.md5(raw_key.encode()).hexdigest()}"
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         await self._check_quota()
         params = {"limit": min(limit, 50), "status": "Active"}
         if zip_code:
@@ -184,13 +204,17 @@ class RentCastAdapter(BaseDataSource):
                 resp = await client.get("/listings/sale", params=params)
                 resp.raise_for_status()
                 await self._increment_quota()
-                return [self._normalize_listing(p) for p in resp.json()]
+                results = [self._normalize_listing(p) for p in resp.json()]
+                await cache_set(cache_key, results, ttl=SEARCH_TTL)
+                return results
             except Exception:
                 # Fall back to property records (no prices, but still useful for the map)
                 try:
                     params.pop("status", None)
                     resp = await client.get("/properties", params=params)
                     resp.raise_for_status()
-                    return [self._normalize(p) for p in resp.json()]
+                    results = [self._normalize(p) for p in resp.json()]
+                    await cache_set(cache_key, results, ttl=SEARCH_TTL)
+                    return results
                 except Exception:
                     return []
