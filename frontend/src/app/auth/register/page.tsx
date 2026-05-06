@@ -1,19 +1,62 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/store/authStore";
 import { UserPlus } from "lucide-react";
 
+declare global {
+  interface Window {
+    google: any;
+  }
+}
+
 export default function RegisterPage() {
   const router = useRouter();
-  const { register, isLoading } = useAuthStore();
+  const { register, loginWithGoogle, isLoading } = useAuthStore();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const googleBtnRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID;
+    if (!clientId || !googleBtnRef.current) return;
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      window.google?.accounts.id.initialize({
+        client_id: clientId,
+        callback: handleGoogleCredential,
+      });
+      window.google?.accounts.id.renderButton(googleBtnRef.current!, {
+        theme: "filled_black",
+        size: "large",
+        width: googleBtnRef.current!.offsetWidth || 400,
+        text: "signup_with",
+        shape: "rectangular",
+        logo_alignment: "left",
+      });
+    };
+    document.head.appendChild(script);
+    return () => { document.head.removeChild(script); };
+  }, []);
+
+  async function handleGoogleCredential(response: { credential: string }) {
+    setError("");
+    try {
+      await loginWithGoogle(response.credential);
+      router.push("/");
+    } catch {
+      setError("Google sign-up failed. Please try again.");
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -64,6 +107,18 @@ export default function RegisterPage() {
             <div className="mb-4 p-3 border border-accent-red/40 bg-accent-red/10 font-mono text-xs text-accent-red">
               ⚠ {error}
             </div>
+          )}
+
+          {/* Google Sign-Up */}
+          {process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID && (
+            <>
+              <div ref={googleBtnRef} className="w-full mb-4" />
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-1 h-px bg-border-subtle" />
+                <span className="font-mono text-xs text-text-muted uppercase tracking-widest">or</span>
+                <div className="flex-1 h-px bg-border-subtle" />
+              </div>
+            </>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">

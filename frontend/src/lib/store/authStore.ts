@@ -27,6 +27,7 @@ interface AuthStore {
   isInitialized: boolean; // true once we know whether the user is logged in or not
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<void>;
   register: (email: string, password: string, fullName: string) => Promise<void>;
   logout: () => Promise<void>;
   loadUser: () => Promise<void>;
@@ -49,6 +50,19 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ isLoading: true });
     try {
       const tokens = await api.login(email, password);
+      localStorage.setItem("access_token", tokens.access_token);
+      localStorage.setItem("refresh_token", tokens.refresh_token);
+      set({ accessToken: tokens.access_token });
+      await get().loadUser();
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  loginWithGoogle: async (credential) => {
+    set({ isLoading: true });
+    try {
+      const tokens = await api.googleLogin(credential);
       localStorage.setItem("access_token", tokens.access_token);
       localStorage.setItem("refresh_token", tokens.refresh_token);
       set({ accessToken: tokens.access_token });

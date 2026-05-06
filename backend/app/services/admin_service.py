@@ -12,6 +12,7 @@ from app.schemas.user import (
     AdminUserItem, AdminUserUpdate,
 )
 from app.core.redis_client import cache_get
+from datetime import datetime as _dt
 from app.core.config import settings
 
 RENTCAST_MONTHLY_QUOTA = 50
@@ -93,8 +94,11 @@ class AdminService:
         )
         users = result.scalars().all()
 
-        items = [
-            AdminUserItem(
+        ym = _dt.utcnow().strftime("%Y-%m")
+        items = []
+        for u in users:
+            views_raw = await cache_get(f"user:view_count:{u.id}:{ym}")
+            items.append(AdminUserItem(
                 id=u.id,
                 email=u.email,
                 full_name=u.full_name,
@@ -105,9 +109,8 @@ class AdminService:
                 created_at=u.created_at,
                 saved_properties_count=len(u.saved_properties),
                 saved_searches_count=len(u.saved_searches),
-            )
-            for u in users
-        ]
+                views_used=int(views_raw or 0),
+            ))
         return items, total
 
     async def update_user(self, user_id: str, data: AdminUserUpdate) -> Optional[User]:

@@ -75,6 +75,7 @@ class AdminUserItem(BaseModel):
     created_at: datetime
     saved_properties_count: int = 0
     saved_searches_count: int = 0
+    views_used: int = 0
 
     model_config = {"from_attributes": True}
 

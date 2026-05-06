@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
 
+    # Google OAuth
+    GOOGLE_OAUTH_CLIENT_ID: Optional[str] = None
+
     # Maps
     NEXT_PUBLIC_MAPBOX_TOKEN: Optional[str] = None
 

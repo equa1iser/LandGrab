@@ -28,6 +28,7 @@ interface AdminUser {
   id: string; email: string; full_name: string;
   tier: string; is_active: boolean; is_admin: boolean; is_verified: boolean;
   created_at: string; saved_properties_count: number; saved_searches_count: number;
+  views_used: number;
 }
 interface UsersPage { items: AdminUser[]; total: number; page: number; pages: number }
 
@@ -277,7 +278,7 @@ export default function AdminPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-border-subtle">
-                      {["Status", "Name", "Email", "Tier", "Saved", "Joined", "Actions"].map((h) => (
+                      {["Status", "Name", "Email", "Tier", "Saved", "Views (mo)", "Joined", "Actions"].map((h) => (
                         <th key={h} className="px-4 py-3 text-left font-mono text-[10px] text-text-muted uppercase tracking-widest">
                           {h}
                         </th>
@@ -306,6 +307,15 @@ export default function AdminPage() {
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-text-muted">
                           {u.saved_properties_count}p · {u.saved_searches_count}s
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs">
+                          {u.tier === "pro" ? (
+                            <span className="text-accent-amber">∞</span>
+                          ) : (
+                            <span className={u.views_used >= 5 ? "text-accent-red" : "text-text-muted"}>
+                              {u.views_used}/5
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 font-mono text-[10px] text-text-muted">
                           {new Date(u.created_at).toLocaleDateString()}

@@ -1,3 +1,4 @@
+import secrets
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -57,6 +58,32 @@ class AuthService:
         if not user:
             return None
 
+        return self._create_tokens(user)
+
+    async def google_login(self, google_id: str, email: str, full_name: str) -> TokenResponse:
+        # Try to find by google_id first, then by email (to link existing accounts)
+        result = await self.db.execute(select(User).where(User.google_id == google_id))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            result = await self.db.execute(select(User).where(User.email == email))
+            user = result.scalar_one_or_none()
+            if user:
+                # Link Google to existing email account
+                user.google_id = google_id
+            else:
+                # Create new account — password_hash placeholder is never matchable
+                user = User(
+                    email=email,
+                    full_name=full_name,
+                    google_id=google_id,
+                    password_hash=secrets.token_hex(30),
+                    is_verified=True,
+                )
+                self.db.add(user)
+
+        await self.db.commit()
+        await self.db.refresh(user)
         return self._create_tokens(user)
 
     def _create_tokens(self, user: User) -> TokenResponse:

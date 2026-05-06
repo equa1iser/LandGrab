@@ -79,6 +79,9 @@ export const api = {
   logout: (refreshToken: string) =>
     apiClient.post("/auth/logout", { refresh_token: refreshToken }),
 
+  googleLogin: (credential: string) =>
+    apiClient.post("/auth/google", { credential }).then((r) => r.data),
+
   getMe: () => apiClient.get("/users/me").then((r) => r.data),
 
   // Saved
