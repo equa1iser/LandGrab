@@ -27,6 +27,8 @@ class CompsService:
         if not subject:
             return []
 
+        is_land = str(subject.property_type) == "land"
+
         # Find active listings in the same zip code with a price set.
         # We use current_price from the Property table directly — ATTOM trial plan
         # does not provide sale history, so joining on PriceHistory.sale events
@@ -38,9 +40,8 @@ class CompsService:
                 Property.id != subject.id,
                 Property.current_price.isnot(None),
             )
-            .limit(100)
         )
-        # Filter by property type when set on both sides
+        # Land always filters to other land; for built properties filter by type when set
         if subject.property_type:
             query = query.where(Property.property_type == subject.property_type)
 
@@ -49,7 +50,8 @@ class CompsService:
 
         candidates = []
         for prop in candidates_raw:
-            if subject.sqft and prop.sqft:
+            # For built properties: hard-filter if sqft is wildly different
+            if not is_land and subject.sqft and prop.sqft:
                 sqft_diff = abs(subject.sqft - prop.sqft) / subject.sqft
                 if sqft_diff > 0.50:
                     continue
@@ -63,11 +65,12 @@ class CompsService:
                 if distance > max_distance:
                     continue
 
-            similarity = self._similarity_score(subject, prop, distance)
+            similarity = self._similarity_score(subject, prop, distance, is_land)
             price_per_sqft = None
-            if prop.current_price and prop.sqft:
+            if not is_land and prop.current_price and prop.sqft:
                 price_per_sqft = float(prop.current_price) / prop.sqft
 
+            lot_size_acres = float(prop.lot_size_acres) if prop.lot_size_acres else None
             list_date = prop.list_date or date.today()
 
             candidates.append((similarity, ComparableSale(
@@ -78,6 +81,7 @@ class CompsService:
                 sqft=prop.sqft,
                 beds=prop.beds,
                 baths=prop.baths,
+                lot_size_acres=round(lot_size_acres, 3) if lot_size_acres else None,
                 sale_date=list_date,
                 distance_miles=round(distance, 2) if distance else None,
                 price_per_sqft=round(price_per_sqft, 2) if price_per_sqft else None,
@@ -87,33 +91,46 @@ class CompsService:
         candidates.sort(key=lambda x: x[0], reverse=True)
         return [comp for _, comp in candidates[:limit]]
 
-    def _similarity_score(self, subject: Property, comp: Property, distance: Optional[float]) -> float:
+    def _similarity_score(self, subject: Property, comp: Property, distance: Optional[float], is_land: bool = False) -> float:
         score = 100.0
 
-        # Square footage — primary physical match signal (max 40pt penalty)
-        if subject.sqft and comp.sqft:
-            sqft_diff = abs(subject.sqft - comp.sqft) / subject.sqft
-            score -= min(sqft_diff * 50, 40)
+        if is_land:
+            # Lot size — primary comparability signal for land (max 40pt penalty)
+            if subject.lot_size_acres and comp.lot_size_acres:
+                acres_diff = abs(float(subject.lot_size_acres) - float(comp.lot_size_acres)) / float(subject.lot_size_acres)
+                score -= min(acres_diff * 50, 40)
 
-        # Beds — strong comparability signal (max 20pt penalty)
-        if subject.beds and comp.beds:
-            score -= min(abs(subject.beds - comp.beds) * 10, 20)
+            # Price per acre proximity — value tier signal (max 25pt penalty)
+            if subject.current_price and subject.lot_size_acres and comp.current_price and comp.lot_size_acres:
+                subj_ppa = float(subject.current_price) / float(subject.lot_size_acres)
+                comp_ppa = float(comp.current_price) / float(comp.lot_size_acres)
+                ppa_diff = abs(subj_ppa - comp_ppa) / subj_ppa
+                score -= min(ppa_diff * 25, 25)
+        else:
+            # Square footage — primary physical match signal (max 40pt penalty)
+            if subject.sqft and comp.sqft:
+                sqft_diff = abs(subject.sqft - comp.sqft) / subject.sqft
+                score -= min(sqft_diff * 50, 40)
 
-        # Baths — moderate signal (max 12pt penalty)
-        if subject.baths and comp.baths:
-            score -= min(abs(float(subject.baths) - float(comp.baths)) * 8, 12)
+            # Beds — strong comparability signal (max 20pt penalty)
+            if subject.beds and comp.beds:
+                score -= min(abs(subject.beds - comp.beds) * 10, 20)
 
-        # Year built — age affects value comparability (max 15pt penalty)
-        if subject.year_built and comp.year_built:
-            year_diff = abs(subject.year_built - comp.year_built)
-            score -= min(year_diff * 0.4, 15)
+            # Baths — moderate signal (max 12pt penalty)
+            if subject.baths and comp.baths:
+                score -= min(abs(float(subject.baths) - float(comp.baths)) * 8, 12)
 
-        # Price per sqft proximity — keeps comps in the same value tier (max 15pt penalty)
-        if subject.current_price and subject.sqft and comp.current_price and comp.sqft:
-            subj_ppsf = float(subject.current_price) / subject.sqft
-            comp_ppsf = float(comp.current_price) / comp.sqft
-            ppsf_diff = abs(subj_ppsf - comp_ppsf) / subj_ppsf
-            score -= min(ppsf_diff * 20, 15)
+            # Year built — age affects value comparability (max 15pt penalty)
+            if subject.year_built and comp.year_built:
+                year_diff = abs(subject.year_built - comp.year_built)
+                score -= min(year_diff * 0.4, 15)
+
+            # Price per sqft proximity — keeps comps in the same value tier (max 15pt penalty)
+            if subject.current_price and subject.sqft and comp.current_price and comp.sqft:
+                subj_ppsf = float(subject.current_price) / subject.sqft
+                comp_ppsf = float(comp.current_price) / comp.sqft
+                ppsf_diff = abs(subj_ppsf - comp_ppsf) / subj_ppsf
+                score -= min(ppsf_diff * 20, 15)
 
         # Distance — closer is more relevant but shouldn't dominate (max 10pt penalty)
         if distance is not None:

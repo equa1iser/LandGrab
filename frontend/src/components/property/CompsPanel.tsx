@@ -15,6 +15,7 @@ interface Comp {
   sqft?: number;
   beds?: number;
   baths?: number;
+  lot_size_acres?: number;
   sale_date: string;
   distance_miles?: number;
   price_per_sqft?: number;
@@ -24,6 +25,8 @@ interface Comp {
 interface CompsPanelProps {
   propertyId: string;
   subjectPrice?: number;
+  propertyType?: string;
+  subjectLotAcres?: number;
 }
 
 const DISTANCES = [
@@ -33,9 +36,10 @@ const DISTANCES = [
   { label: "1.5mi", value: 1.5 },
 ] as const;
 
-export function CompsPanel({ propertyId, subjectPrice }: CompsPanelProps) {
+export function CompsPanel({ propertyId, subjectPrice, propertyType, subjectLotAcres }: CompsPanelProps) {
   const [maxDistance, setMaxDistance] = useState<number>(20);
   const { data: comps, isLoading } = useComps(propertyId, maxDistance);
+  const isLand = propertyType === "land";
 
   const header = (
     <div className="flex items-center justify-end gap-1 mb-4">
@@ -56,9 +60,11 @@ export function CompsPanel({ propertyId, subjectPrice }: CompsPanelProps) {
     </div>
   );
 
+  const panelLabel = isLand ? "COMPARABLE LAND LISTINGS" : "COMPARABLE SALES";
+
   if (isLoading) {
     return (
-      <HudCard label="COMPARABLE SALES" className="p-6 pt-10">
+      <HudCard label={panelLabel} className="p-6 pt-10">
         {header}
         <p className="text-text-muted font-mono text-sm text-center py-6 animate-pulse">
           Scanning comparables...
@@ -69,10 +75,10 @@ export function CompsPanel({ propertyId, subjectPrice }: CompsPanelProps) {
 
   if (!comps || comps.length === 0) {
     return (
-      <HudCard label="COMPARABLE SALES" className="p-6 pt-10">
+      <HudCard label={panelLabel} className="p-6 pt-10">
         {header}
         <p className="text-text-muted font-mono text-sm text-center py-6">
-          No comparable listings found within {maxDistance} miles
+          No comparable {isLand ? "land listings" : "listings"} found within {maxDistance} miles
         </p>
       </HudCard>
     );
@@ -81,8 +87,20 @@ export function CompsPanel({ propertyId, subjectPrice }: CompsPanelProps) {
   const avgPrice = comps.reduce((sum: number, c: Comp) => sum + c.price, 0) / comps.length;
   const vsAvg = subjectPrice ? ((subjectPrice - avgPrice) / avgPrice) * 100 : null;
 
+  // For land: compute avg $/acre across comps that have acreage
+  const compsWithAcres = isLand ? comps.filter((c: Comp) => c.lot_size_acres && c.lot_size_acres > 0) : [];
+  const avgPricePerAcre = compsWithAcres.length > 0
+    ? compsWithAcres.reduce((sum: number, c: Comp) => sum + c.price / c.lot_size_acres!, 0) / compsWithAcres.length
+    : null;
+  const subjectPricePerAcre = isLand && subjectPrice && subjectLotAcres && subjectLotAcres > 0
+    ? subjectPrice / subjectLotAcres
+    : null;
+  const vsAvgAcre = subjectPricePerAcre && avgPricePerAcre
+    ? ((subjectPricePerAcre - avgPricePerAcre) / avgPricePerAcre) * 100
+    : null;
+
   return (
-    <HudCard label="COMPARABLE SALES" className="p-6 pt-10">
+    <HudCard label={panelLabel} className="p-6 pt-10">
       {header}
 
       {/* Summary */}
@@ -94,20 +112,39 @@ export function CompsPanel({ propertyId, subjectPrice }: CompsPanelProps) {
           <div className="font-display font-bold text-2xl text-text-primary">
             ${avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
+          {avgPricePerAcre && (
+            <div className="font-mono text-xs text-text-muted mt-0.5">
+              avg ${avgPricePerAcre.toLocaleString(undefined, { maximumFractionDigits: 0 })}/acre
+            </div>
+          )}
         </div>
-        {vsAvg !== null && (
+        {(vsAvg !== null || vsAvgAcre !== null) && (
           <div className="text-right">
             <div className="font-mono text-xs text-text-muted uppercase tracking-wider mb-1">
               Subject vs Avg
             </div>
-            <div
-              className={clsx(
-                "font-display font-bold text-xl",
-                vsAvg > 5 ? "text-accent-red" : vsAvg < -5 ? "text-accent-green" : "text-accent-amber"
-              )}
-            >
-              {vsAvg > 0 ? "+" : ""}{vsAvg.toFixed(1)}%
-            </div>
+            {vsAvgAcre !== null ? (
+              <>
+                <div
+                  className={clsx(
+                    "font-display font-bold text-xl",
+                    vsAvgAcre > 5 ? "text-accent-red" : vsAvgAcre < -5 ? "text-accent-green" : "text-accent-amber"
+                  )}
+                >
+                  {vsAvgAcre > 0 ? "+" : ""}{vsAvgAcre.toFixed(1)}%
+                </div>
+                <div className="font-mono text-xs text-text-muted">$/acre basis</div>
+              </>
+            ) : vsAvg !== null ? (
+              <div
+                className={clsx(
+                  "font-display font-bold text-xl",
+                  vsAvg > 5 ? "text-accent-red" : vsAvg < -5 ? "text-accent-green" : "text-accent-amber"
+                )}
+              >
+                {vsAvg > 0 ? "+" : ""}{vsAvg.toFixed(1)}%
+              </div>
+            ) : null}
           </div>
         )}
       </div>
@@ -117,6 +154,9 @@ export function CompsPanel({ propertyId, subjectPrice }: CompsPanelProps) {
         {comps.map((comp: Comp, i: number) => {
           const priceDiff = subjectPrice
             ? ((comp.price - subjectPrice) / subjectPrice) * 100
+            : null;
+          const compPricePerAcre = isLand && comp.lot_size_acres && comp.lot_size_acres > 0
+            ? comp.price / comp.lot_size_acres
             : null;
           return (
             <div
@@ -137,18 +177,28 @@ export function CompsPanel({ propertyId, subjectPrice }: CompsPanelProps) {
                       <Calendar className="w-3 h-3" />
                       {format(parseISO(comp.sale_date), "MMM d, yyyy")}
                     </span>
-                    {comp.sqft && (
+                    {isLand && comp.lot_size_acres ? (
+                      <span className="flex items-center gap-1">
+                        <Ruler className="w-3 h-3" />
+                        {comp.lot_size_acres} acres
+                      </span>
+                    ) : !isLand && comp.sqft ? (
                       <span className="flex items-center gap-1">
                         <Ruler className="w-3 h-3" />
                         {comp.sqft.toLocaleString()} sqft
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">
                   <div className="font-display font-bold text-text-primary">
                     ${comp.price.toLocaleString()}
                   </div>
+                  {compPricePerAcre !== null && (
+                    <div className="font-mono text-xs text-text-muted">
+                      ${compPricePerAcre.toLocaleString(undefined, { maximumFractionDigits: 0 })}/acre
+                    </div>
+                  )}
                   {priceDiff !== null && (
                     <div
                       className={clsx(

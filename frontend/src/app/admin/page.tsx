@@ -292,7 +292,7 @@ export default function AdminPage() {
                           <div className="flex items-center gap-2">
                             <StatusDot active={u.is_active} />
                             {u.is_admin && (
-                              <ShieldCheck className="w-3.5 h-3.5 text-accent-amber" title="Admin" />
+                              <ShieldCheck className="w-3.5 h-3.5 text-accent-amber" aria-label="Admin" />
                             )}
                           </div>
                         </td>

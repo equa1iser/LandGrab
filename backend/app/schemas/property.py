@@ -33,6 +33,7 @@ class ComparableSale(BaseModel):
     sqft: Optional[int] = None
     beds: Optional[int] = None
     baths: Optional[float] = None
+    lot_size_acres: Optional[float] = None
     sale_date: date
     distance_miles: Optional[float] = None
     price_per_sqft: Optional[float] = None

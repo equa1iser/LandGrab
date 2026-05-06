@@ -105,9 +105,14 @@ function PropertyHeader({
   isSaved: boolean;
   onSave: () => void;
 }) {
+  const isLand = prop.property_type === "land";
   const pricePerSqft =
-    prop.current_price && prop.sqft
+    !isLand && prop.current_price && prop.sqft
       ? (prop.current_price / prop.sqft).toFixed(0)
+      : null;
+  const pricePerAcre =
+    isLand && prop.current_price && prop.lot_size_acres
+      ? (prop.current_price / prop.lot_size_acres).toFixed(0)
       : null;
 
   return (
@@ -151,8 +156,9 @@ function PropertyHeader({
                 </span>
               )}
               {prop.lot_size_acres && (
-                <span className="flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-text-muted" /> {prop.lot_size_acres} acres
+                <span className={`flex items-center gap-1.5 ${isLand ? "text-accent-green font-semibold" : ""}`}>
+                  <Layers className={`w-4 h-4 ${isLand ? "text-accent-green" : "text-text-muted"}`} />
+                  {prop.lot_size_acres} acres
                 </span>
               )}
               {prop.year_built && (
@@ -179,6 +185,11 @@ function PropertyHeader({
             {pricePerSqft && (
               <div className="font-mono text-sm text-text-muted mt-1">
                 ${pricePerSqft}/sqft
+              </div>
+            )}
+            {pricePerAcre && (
+              <div className="font-mono text-sm text-text-muted mt-1">
+                ${Number(pricePerAcre).toLocaleString()}/acre
               </div>
             )}
             {prop.days_on_market != null && (
@@ -308,6 +319,8 @@ export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) 
               <CompsPanel
                 propertyId={propertyId}
                 subjectPrice={prop.current_price}
+                propertyType={prop.property_type}
+                subjectLotAcres={prop.lot_size_acres}
               />
             </ProGate>
             <ProGate locked={locked}>
