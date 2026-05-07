@@ -1,22 +1,30 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { SearchBar } from "@/components/search/SearchBar";
 import { PropertyList } from "@/components/search/PropertyList";
-import { FilterPanel } from "@/components/search/FilterPanel";
+import { FilterPanel, type FilterValues } from "@/components/search/FilterPanel";
 import { PropertyMap } from "@/components/map/PropertyMap";
 import { useSearch } from "@/lib/hooks/useSearch";
 import { useAuthStore } from "@/lib/store/authStore";
+
+const DEFAULT_FILTERS: FilterValues = {
+  minPrice: "",
+  maxPrice: "",
+  beds: "",
+  propertyType: "",
+};
 
 function SearchContent() {
   const router = useRouter();
   const { isAuthenticated, isInitialized } = useAuthStore();
   const searchParams = useSearchParams();
   const query = searchParams.get("q") || "";
+  const [filters, setFilters] = useState<FilterValues>(DEFAULT_FILTERS);
 
   // Must be called before any conditional return (React rules of hooks)
-  const { properties, isLoading: searchLoading } = useSearch(query);
+  const { properties, isLoading: searchLoading } = useSearch(query, filters);
 
   useEffect(() => {
     if (isInitialized && !isAuthenticated) router.replace("/auth/login");
@@ -29,7 +37,7 @@ function SearchContent() {
       {/* Top search bar */}
       <div className="h-14 border-b border-border-subtle bg-bg-secondary flex items-center px-4 gap-4">
         <SearchBar initialValue={query} compact />
-        <FilterPanel />
+        <FilterPanel values={filters} onChange={setFilters} />
       </div>
 
       {/* Split pane: list + map */}

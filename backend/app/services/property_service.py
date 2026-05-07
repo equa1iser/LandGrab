@@ -199,6 +199,8 @@ class PropertyService:
             query = query.where(Property.current_price <= max_price)
         if beds:
             query = query.where(Property.beds >= beds)
+        if baths:
+            query = query.where(Property.baths >= baths)
         if property_type:
             query = query.where(Property.property_type == property_type)
         query = query.limit(limit)

@@ -1,6 +1,6 @@
 import { HudCard } from "@/components/ui/HudCard";
 import { StatBadge } from "@/components/ui/StatBadge";
-import { GraduationCap, Footprints, Bus } from "lucide-react";
+import { GraduationCap, Footprints, Bus, Bike } from "lucide-react";
 
 interface Neighborhood {
   median_household_income?: number;
@@ -9,6 +9,7 @@ interface Neighborhood {
   owner_occupied_pct?: number;
   walk_score?: number;
   transit_score?: number;
+  bike_score?: number;
   school_rating_avg?: number;
 }
 
@@ -62,14 +63,14 @@ export function NeighborhoodPanel({ data }: NeighborhoodPanelProps) {
           </div>
         )}
 
-        {/* Walk + Transit */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Walk + Transit + Bike */}
+        <div className="grid grid-cols-3 gap-3">
           {data.walk_score != null && (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <Footprints className="w-4 h-4 text-text-muted flex-shrink-0" />
               <div className="flex-1">
                 <div className="font-mono text-xs text-text-muted uppercase tracking-wider">Walk</div>
-                <div className="font-semibold text-text-primary">{data.walk_score}/100</div>
+                <div className="font-semibold text-text-primary">{data.walk_score}</div>
                 <div className="mt-1">
                   <ScoreBar value={data.walk_score} color="#f59e0b" />
                 </div>
@@ -77,13 +78,25 @@ export function NeighborhoodPanel({ data }: NeighborhoodPanelProps) {
             </div>
           )}
           {data.transit_score != null && (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <Bus className="w-4 h-4 text-text-muted flex-shrink-0" />
               <div className="flex-1">
                 <div className="font-mono text-xs text-text-muted uppercase tracking-wider">Transit</div>
-                <div className="font-semibold text-text-primary">{data.transit_score}/100</div>
+                <div className="font-semibold text-text-primary">{data.transit_score}</div>
                 <div className="mt-1">
                   <ScoreBar value={data.transit_score} color="#f59e0b" />
+                </div>
+              </div>
+            </div>
+          )}
+          {data.bike_score != null && (
+            <div className="flex items-center gap-2">
+              <Bike className="w-4 h-4 text-text-muted flex-shrink-0" />
+              <div className="flex-1">
+                <div className="font-mono text-xs text-text-muted uppercase tracking-wider">Bike</div>
+                <div className="font-semibold text-text-primary">{data.bike_score}</div>
+                <div className="mt-1">
+                  <ScoreBar value={data.bike_score} color="#f59e0b" />
                 </div>
               </div>
             </div>

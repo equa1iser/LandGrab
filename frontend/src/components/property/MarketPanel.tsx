@@ -10,8 +10,10 @@ interface MarketData {
   sales_volume_30d?: number;
   sales_volume_90d?: number;
   yoy_price_change_pct?: number;
+  mom_price_change_pct?: number;
   interest_rate_30yr?: number;
   interest_rate_15yr?: number;
+  interest_rate_5yr_arm?: number;
 }
 
 interface MarketPanelProps {
@@ -106,6 +108,15 @@ export function MarketPanel({ data, zip, propertyType }: MarketPanelProps) {
             trendGoodDirection="up"
             size="sm"
           />
+          {data.mom_price_change_pct != null && (
+            <StatBadge
+              label="MoM Change"
+              value={`${data.mom_price_change_pct > 0 ? "+" : ""}${data.mom_price_change_pct.toFixed(1)}%`}
+              trend={data.mom_price_change_pct > 0 ? "up" : "down"}
+              trendGoodDirection="up"
+              size="sm"
+            />
+          )}
           {data.sales_volume_30d != null && (
             <StatBadge
               label="Sales (30d)"
@@ -123,12 +134,12 @@ export function MarketPanel({ data, zip, propertyType }: MarketPanelProps) {
         </div>
 
         {/* Interest rates */}
-        {(data.interest_rate_30yr || data.interest_rate_15yr) && (
+        {(data.interest_rate_30yr || data.interest_rate_15yr || data.interest_rate_5yr_arm) && (
           <div className="pt-3 border-t border-border-subtle">
             <div className="font-mono text-xs text-text-muted uppercase tracking-wider mb-3">
               Current Mortgage Rates (FRED)
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-3">
               <StatBadge
                 label="30-Year Fixed"
                 value={data.interest_rate_30yr ? `${data.interest_rate_30yr.toFixed(2)}%` : undefined}
@@ -137,6 +148,11 @@ export function MarketPanel({ data, zip, propertyType }: MarketPanelProps) {
               <StatBadge
                 label="15-Year Fixed"
                 value={data.interest_rate_15yr ? `${data.interest_rate_15yr.toFixed(2)}%` : undefined}
+                size="sm"
+              />
+              <StatBadge
+                label="5-Year ARM"
+                value={data.interest_rate_5yr_arm ? `${data.interest_rate_5yr_arm.toFixed(2)}%` : undefined}
                 size="sm"
               />
             </div>

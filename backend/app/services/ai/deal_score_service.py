@@ -59,7 +59,11 @@ class DealScoreService:
         comps_dicts = [c.model_dump() for c in comps]
 
         tax_history = [
-            {"year": th.year, "tax_amount": float(th.tax_amount) if th.tax_amount else None}
+            {
+                "year": th.year,
+                "tax_amount": float(th.tax_amount) if th.tax_amount else None,
+                "assessed_value": float(th.assessed_value) if th.assessed_value else None,
+            }
             for th in prop.tax_history
         ]
         price_history = [
@@ -70,6 +74,9 @@ class DealScoreService:
         # Rule-based component scores
         components = self.engine.compute_component_scores(
             current_price=float(prop.current_price) if prop.current_price else None,
+            sqft=prop.sqft,
+            lot_size_acres=float(prop.lot_size_acres) if prop.lot_size_acres else None,
+            property_type=str(prop.property_type) if prop.property_type else None,
             comps=comps_dicts,
             neighborhood=neighborhood,
             market=market,
@@ -105,9 +112,11 @@ class DealScoreService:
 
         claude_result = await analyze_with_claude(briefing, component_dict, composite)
 
-        # Blend: 70% rule-based + 30% Claude
+        # Blend: 70% rule-based + 30% Claude (clamp LLM score to ±25 of composite)
         if claude_result and claude_result.get("adjusted_score") is not None:
-            final_score = int(composite * 0.70 + claude_result["adjusted_score"] * 0.30)
+            llm_score = claude_result["adjusted_score"]
+            llm_score = max(composite - 25, min(composite + 25, llm_score))
+            final_score = int(composite * 0.70 + llm_score * 0.30)
             grade = claude_result.get("grade", self.engine.score_to_grade(final_score))
             verdict = claude_result.get("verdict")
             ai_analysis = claude_result.get("summary")

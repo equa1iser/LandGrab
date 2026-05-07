@@ -3,8 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store/authStore";
+import type { FilterValues } from "@/components/search/FilterPanel";
 
-export function useSearch(query: string) {
+export function useSearch(query: string, filters?: FilterValues) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isAddress = /\d/.test(query) && query.length > 5;
   const isZip = /^\d{5}$/.test(query.trim());
@@ -24,8 +25,13 @@ export function useSearch(query: string) {
     }
   }
 
+  if (filters?.minPrice) params.min_price = Number(filters.minPrice);
+  if (filters?.maxPrice) params.max_price = Number(filters.maxPrice);
+  if (filters?.beds) params.beds = Number(filters.beds);
+  if (filters?.propertyType) params.property_type = filters.propertyType;
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ["search", query],
+    queryKey: ["search", query, filters],
     queryFn: () => (query ? api.searchProperties(params) : Promise.resolve([])),
     enabled: query.length >= 2 && isAuthenticated,
     staleTime: 2 * 60 * 1000,

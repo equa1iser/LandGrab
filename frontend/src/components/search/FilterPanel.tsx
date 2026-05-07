@@ -4,22 +4,66 @@ import { useState } from "react";
 import { SlidersHorizontal, X } from "lucide-react";
 import { clsx } from "clsx";
 
-export function FilterPanel() {
+export interface FilterValues {
+  minPrice: string;
+  maxPrice: string;
+  beds: string;
+  propertyType: string;
+}
+
+interface FilterPanelProps {
+  values: FilterValues;
+  onChange: (values: FilterValues) => void;
+}
+
+const PROPERTY_TYPE_OPTIONS = [
+  { label: "Single Family", value: "single_family" },
+  { label: "Condo", value: "condo" },
+  { label: "Townhouse", value: "townhouse" },
+  { label: "Multi-Family", value: "multi_family" },
+  { label: "Land", value: "land" },
+];
+
+export function FilterPanel({ values, onChange }: FilterPanelProps) {
   const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<FilterValues>(values);
+
+  const hasActiveFilters =
+    !!values.minPrice || !!values.maxPrice || !!values.beds || !!values.propertyType;
+
+  function handleOpen() {
+    setDraft(values);
+    setOpen(true);
+  }
+
+  function handleApply() {
+    onChange(draft);
+    setOpen(false);
+  }
+
+  function handleClear() {
+    const cleared = { minPrice: "", maxPrice: "", beds: "", propertyType: "" };
+    setDraft(cleared);
+    onChange(cleared);
+    setOpen(false);
+  }
 
   return (
     <div className="relative">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={handleOpen}
         className={clsx(
           "flex items-center gap-2 h-9 px-3 border font-mono text-xs uppercase tracking-wider transition-colors duration-200",
-          open
+          open || hasActiveFilters
             ? "border-accent-green/50 text-accent-green bg-accent-green/5"
             : "border-border-subtle text-text-muted hover:text-text-secondary"
         )}
       >
         <SlidersHorizontal className="w-3.5 h-3.5" />
         Filters
+        {hasActiveFilters && (
+          <span className="w-1.5 h-1.5 rounded-full bg-accent-green" />
+        )}
       </button>
 
       {open && (
@@ -45,12 +89,16 @@ export function FilterPanel() {
               <input
                 type="number"
                 placeholder="Min $"
+                value={draft.minPrice}
+                onChange={(e) => setDraft({ ...draft, minPrice: e.target.value })}
                 className="flex-1 h-8 px-2 bg-bg-primary border border-border-subtle text-text-primary font-mono text-xs
                   focus:border-accent-green/50 outline-none"
               />
               <input
                 type="number"
                 placeholder="Max $"
+                value={draft.maxPrice}
+                onChange={(e) => setDraft({ ...draft, maxPrice: e.target.value })}
                 className="flex-1 h-8 px-2 bg-bg-primary border border-border-subtle text-text-primary font-mono text-xs
                   focus:border-accent-green/50 outline-none"
               />
@@ -63,15 +111,23 @@ export function FilterPanel() {
               Min Bedrooms
             </label>
             <div className="flex gap-1">
-              {["Any", "1", "2", "3", "4+"].map((opt) => (
-                <button
-                  key={opt}
-                  className="flex-1 h-8 border border-border-subtle text-text-muted font-mono text-xs
-                    hover:border-accent-green/50 hover:text-accent-green transition-colors"
-                >
-                  {opt}
-                </button>
-              ))}
+              {(["Any", "1", "2", "3", "4+"] as const).map((opt) => {
+                const val = opt === "Any" ? "" : opt === "4+" ? "4" : opt;
+                return (
+                  <button
+                    key={opt}
+                    onClick={() => setDraft({ ...draft, beds: val })}
+                    className={clsx(
+                      "flex-1 h-8 border font-mono text-xs transition-colors",
+                      draft.beds === val
+                        ? "border-accent-green/50 text-accent-green bg-accent-green/5"
+                        : "border-border-subtle text-text-muted hover:border-accent-green/50 hover:text-accent-green"
+                    )}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -81,24 +137,41 @@ export function FilterPanel() {
               Property Type
             </label>
             <div className="grid grid-cols-2 gap-1">
-              {["Single Family", "Condo", "Townhouse", "Multi-Family"].map((type) => (
+              {PROPERTY_TYPE_OPTIONS.map(({ label, value }) => (
                 <button
-                  key={type}
-                  className="h-8 border border-border-subtle text-text-muted font-mono text-xs
-                    hover:border-accent-green/50 hover:text-accent-green transition-colors px-2 text-left"
+                  key={value}
+                  onClick={() =>
+                    setDraft({ ...draft, propertyType: draft.propertyType === value ? "" : value })
+                  }
+                  className={clsx(
+                    "h-8 border font-mono text-xs px-2 text-left transition-colors",
+                    draft.propertyType === value
+                      ? "border-accent-green/50 text-accent-green bg-accent-green/5"
+                      : "border-border-subtle text-text-muted hover:border-accent-green/50 hover:text-accent-green"
+                  )}
                 >
-                  {type}
+                  {label}
                 </button>
               ))}
             </div>
           </div>
 
-          <button
-            className="w-full h-9 bg-accent-green text-bg-primary font-display font-bold
-              text-xs uppercase tracking-wider hover:bg-accent-green/90 transition-colors"
-          >
-            Apply Filters
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleClear}
+              className="flex-1 h-9 border border-border-subtle text-text-muted font-mono
+                text-xs uppercase tracking-wider hover:border-accent-red/40 hover:text-accent-red transition-colors"
+            >
+              Clear
+            </button>
+            <button
+              onClick={handleApply}
+              className="flex-1 h-9 bg-accent-green text-bg-primary font-display font-bold
+                text-xs uppercase tracking-wider hover:bg-accent-green/90 transition-colors"
+            >
+              Apply
+            </button>
+          </div>
         </div>
       )}
     </div>

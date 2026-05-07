@@ -19,7 +19,7 @@ import { ProGate } from "@/components/ui/ProGate";
 import { api } from "@/lib/api-client";
 import {
   Bed, Bath, Square, MapPin, Calendar, Layers,
-  Home, Heart, Share2, ChevronLeft, ChevronRight, Satellite, Zap,
+  Home, Heart, Share2, ChevronLeft, ChevronRight, Satellite, Zap, ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -223,6 +223,31 @@ function PropertyHeader({
   );
 }
 
+function PropertyDescription({ description }: { description?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!description) return null;
+  const isLong = description.length > 300;
+  return (
+    <div className="hud-card p-5">
+      <div className="font-mono text-xs text-text-muted uppercase tracking-widest mb-3">
+        About This Property
+      </div>
+      <p className={`text-sm text-text-secondary leading-relaxed ${!expanded && isLong ? "line-clamp-3" : ""}`}>
+        {description}
+      </p>
+      {isLong && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-1 mt-2 font-mono text-xs text-accent-green hover:text-accent-green/80 transition-colors"
+        >
+          {expanded ? "Show less" : "Read more"}
+          <ChevronDown className={`w-3 h-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) {
   const router = useRouter();
   const { isAuthenticated, isInitialized } = useAuthStore();
@@ -309,6 +334,7 @@ export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) 
 
           {/* Left column — primary data */}
           <div className="lg:col-span-2 space-y-6">
+            <PropertyDescription description={prop.description} />
             <ProGate locked={locked}>
               <PriceHistoryChart
                 history={priceHistory || data.price_history || []}

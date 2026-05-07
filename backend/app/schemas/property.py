@@ -53,6 +53,7 @@ class NeighborhoodSummary(BaseModel):
     owner_occupied_pct: Optional[float] = None
     walk_score: Optional[int] = None
     transit_score: Optional[int] = None
+    bike_score: Optional[int] = None
     school_rating_avg: Optional[float] = None
 
     model_config = {"from_attributes": True}
@@ -66,8 +67,10 @@ class MarketSummary(BaseModel):
     sales_volume_30d: Optional[int] = None
     sales_volume_90d: Optional[int] = None
     yoy_price_change_pct: Optional[float] = None
+    mom_price_change_pct: Optional[float] = None
     interest_rate_30yr: Optional[float] = None
     interest_rate_15yr: Optional[float] = None
+    interest_rate_5yr_arm: Optional[float] = None
 
     model_config = {"from_attributes": True}
 
@@ -101,6 +104,7 @@ class PropertyBase(BaseModel):
     current_price: Optional[float] = None
     list_date: Optional[date] = None
     days_on_market: Optional[int] = None
+    description: Optional[str] = None
     photo_urls: Optional[list] = None
 
     model_config = {"from_attributes": True}

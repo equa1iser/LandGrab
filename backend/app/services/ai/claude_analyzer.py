@@ -76,6 +76,10 @@ def format_property_briefing(
             lines.append(f"  Walk Score: {neighborhood['walk_score']}/100")
         if neighborhood.get("median_household_income") is not None:
             lines.append(f"  Median Income: ${neighborhood['median_household_income']:,.0f}")
+        if neighborhood.get("median_home_value") is not None:
+            lines.append(f"  Median Home Value: ${neighborhood['median_home_value']:,.0f}")
+        if neighborhood.get("owner_occupied_pct") is not None:
+            lines.append(f"  Owner-Occupied: {neighborhood['owner_occupied_pct']:.0f}%")
         if neighborhood.get("population_growth_pct") is not None:
             lines.append(f"  Population Growth: {neighborhood['population_growth_pct']:+.1f}%/yr")
         lines.append("")
@@ -90,6 +94,14 @@ def format_property_briefing(
             lines.append(f"  Median Days on Market: {market['median_days_on_market']}")
         if market.get("yoy_price_change_pct") is not None:
             lines.append(f"  YoY Price Change: {market['yoy_price_change_pct']:+.1f}%")
+        if market.get("mom_price_change_pct") is not None:
+            lines.append(f"  MoM Price Change: {market['mom_price_change_pct']:+.1f}%")
+        v30 = market.get("sales_volume_30d")
+        v90 = market.get("sales_volume_90d")
+        if v30 is not None and v90 is not None and float(v90) > 0:
+            ratio = float(v30) * 3 / float(v90)
+            trend = "ACCELERATING" if ratio > 1.1 else "SLOWING" if ratio < 0.9 else "STABLE"
+            lines.append(f"  Sales Velocity: {v30} (30d) vs {v90} (90d) — {trend}")
         if market.get("interest_rate_30yr") is not None:
             lines.append(f"  Current 30yr Rate: {market['interest_rate_30yr']:.2f}%")
         lines.append("")

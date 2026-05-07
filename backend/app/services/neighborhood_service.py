@@ -82,5 +82,6 @@ class NeighborhoodService:
             "owner_occupied_pct": record.owner_occupied_pct,
             "walk_score": record.walk_score,
             "transit_score": record.transit_score,
+            "bike_score": record.bike_score,
             "school_rating_avg": record.school_rating_avg,
         }

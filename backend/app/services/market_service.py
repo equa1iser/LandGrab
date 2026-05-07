@@ -78,6 +78,8 @@ class MarketService:
             "sales_volume_30d": record.sales_volume_30d,
             "sales_volume_90d": record.sales_volume_90d,
             "yoy_price_change_pct": record.yoy_price_change_pct,
+            "mom_price_change_pct": record.mom_price_change_pct,
             "interest_rate_30yr": record.interest_rate_30yr,
             "interest_rate_15yr": record.interest_rate_15yr,
+            "interest_rate_5yr_arm": record.interest_rate_5yr_arm,
         }
