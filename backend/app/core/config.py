@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     DEBUG: bool = False
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    # Additional origins for mobile app (Expo Go dev + LAN testing).
+    # Set MOBILE_ALLOWED_ORIGINS in .env as a comma-separated list, e.g.:
+    #   MOBILE_ALLOWED_ORIGINS=http://192.168.1.x:8000,exp://192.168.1.x:8081
+    MOBILE_ALLOWED_ORIGINS: list[str] = []
 
 
 settings = Settings()

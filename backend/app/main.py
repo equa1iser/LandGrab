@@ -33,10 +33,15 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+_cors_origins = settings.ALLOWED_ORIGINS + settings.MOBILE_ALLOWED_ORIGINS
+# In debug mode allow all origins so mobile devices on the LAN can connect
+if settings.DEBUG:
+    _cors_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=not settings.DEBUG,  # credentials forbidden when allow_origins="*"
     allow_methods=["*"],
     allow_headers=["*"],
 )
