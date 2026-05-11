@@ -39,7 +39,22 @@ export default function WatchlistScreen() {
     ]);
   };
 
-  const properties = (saved ?? []).map((s: any) => s.property).filter(Boolean);
+  // Backend returns a flat dict (address, not address_line1; no nested property object).
+  // Map each item into the shape PropertyCard expects.
+  const toProperty = (item: any) => ({
+    id: item.property_id,
+    address_line1: item.address,
+    city: item.city,
+    state: item.state,
+    zip_code: item.zip_code,
+    beds: item.beds ?? undefined,
+    baths: item.baths ?? undefined,
+    sqft: item.sqft ?? undefined,
+    current_price: item.current_price ?? undefined,
+    lot_size_acres: item.lot_size_acres ?? undefined,
+    property_type: item.property_type ?? undefined,
+    days_on_market: item.days_on_market ?? undefined,
+  });
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -71,10 +86,10 @@ export default function WatchlistScreen() {
         contentContainerStyle={styles.list}
         renderItem={({ item }: any) => (
           <View style={styles.savedItem}>
-            {item.property && <PropertyCard property={item.property} />}
+            <PropertyCard property={toProperty(item)} />
             <TouchableOpacity
               style={styles.removeBtn}
-              onPress={() => handleUnsave(item.id, item.property?.address_line1 ?? 'this property')}
+              onPress={() => handleUnsave(item.id, item.address ?? 'this property')}
             >
               <Ionicons name="trash-outline" size={14} color={Colors.accentRed} />
               <Text style={styles.removeText}>REMOVE</Text>
