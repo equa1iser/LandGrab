@@ -9,7 +9,7 @@ import type { DealScoreSummary } from '../../types';
 interface Props { dealScore: DealScoreSummary }
 
 export function DealScorePanel({ dealScore }: Props) {
-  const { score, grade, verdict, ai_analysis, key_factors, score_components } = dealScore;
+  const { score, grade, verdict, ai_analysis, key_factors, score_components, risks, opportunities } = dealScore;
 
   return (
     <HudCard label="DEAL SCORE" glow="green">
@@ -46,6 +46,33 @@ export function DealScorePanel({ dealScore }: Props) {
           ))}
         </View>
       )}
+
+      {(risks?.length || opportunities?.length) ? (
+        <View style={styles.riskOppRow}>
+          {risks && risks.length > 0 && (
+            <View style={styles.riskCol}>
+              <Text style={styles.riskLabel}>RISKS</Text>
+              {risks.map((r, i) => (
+                <View key={i} style={styles.bulletRow}>
+                  <Ionicons name="alert-circle-outline" size={11} color={Colors.accentRed} />
+                  <Text style={[styles.bulletText, { color: Colors.textSecondary }]}>{r}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+          {opportunities && opportunities.length > 0 && (
+            <View style={styles.oppCol}>
+              <Text style={styles.oppLabel}>OPPORTUNITIES</Text>
+              {opportunities.map((o, i) => (
+                <View key={i} style={styles.bulletRow}>
+                  <Ionicons name="checkmark-circle-outline" size={11} color={Colors.accentGreen} />
+                  <Text style={[styles.bulletText, { color: Colors.textSecondary }]}>{o}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      ) : null}
 
       {score_components && Object.keys(score_components).length > 0 && (
         <View style={styles.components}>
@@ -85,6 +112,13 @@ const styles = StyleSheet.create({
   factor: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.sm, alignItems: 'flex-start' },
   factorName: { fontFamily: Fonts.monoBold, fontSize: 11, color: Colors.textPrimary },
   factorDesc: { fontFamily: Fonts.body, fontSize: 11, color: Colors.textSecondary },
+  riskOppRow: { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.md },
+  riskCol: { flex: 1 },
+  oppCol: { flex: 1 },
+  riskLabel: { fontFamily: Fonts.mono, fontSize: 9, color: Colors.accentRed, letterSpacing: 2, marginBottom: Spacing.sm },
+  oppLabel: { fontFamily: Fonts.mono, fontSize: 9, color: Colors.accentGreen, letterSpacing: 2, marginBottom: Spacing.sm },
+  bulletRow: { flexDirection: 'row', gap: 4, marginBottom: 4, alignItems: 'flex-start' },
+  bulletText: { fontFamily: Fonts.body, fontSize: 11, flex: 1, lineHeight: 16 },
   components: {},
   componentRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: 6 },
   componentKey: { fontFamily: Fonts.mono, fontSize: 9, color: Colors.textMuted, width: 100, letterSpacing: 0.5 },

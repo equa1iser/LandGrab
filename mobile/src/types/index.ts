@@ -29,6 +29,8 @@ export interface DealScoreSummary {
   ai_analysis?: string;
   score_components?: Record<string, number>;
   key_factors?: Array<{ factor: string; impact: string; description: string }>;
+  risks?: string[];
+  opportunities?: string[];
 }
 
 export interface PropertySummary {
@@ -130,7 +132,11 @@ export interface AVMResult {
   estimated_value?: number;
   confidence_low?: number;
   confidence_high?: number;
+  confidence_pct?: number;
+  vs_list_price_pct?: number;
+  feature_importances?: Record<string, number>;
   model_version?: string;
+  source?: string;
 }
 
 export interface UsageInfo {

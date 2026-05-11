@@ -5,7 +5,8 @@ import { HudCard } from '../ui/HudCard';
 import { Colors, Fonts, Spacing } from '../../theme';
 import type { PriceEvent } from '../../types';
 
-const W = Dimensions.get('window').width - 64; // account for card padding
+const YAXIS_WIDTH = 40;
+const W = Dimensions.get('window').width - 64 - YAXIS_WIDTH;
 
 function fmtPrice(n: number) {
   return n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : `$${Math.round(n / 1000)}K`;
@@ -34,6 +35,7 @@ export function PriceHistoryChart({ events }: Props) {
       <LineChart
         data={data}
         width={W}
+        yAxisWidth={YAXIS_WIDTH}
         height={160}
         color={Colors.accentCyan}
         thickness={2}
