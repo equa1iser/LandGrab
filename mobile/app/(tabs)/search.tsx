@@ -22,7 +22,7 @@ export default function SearchScreen() {
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [filters, setFilters] = useState<SearchParams>({ limit: 30 });
   const [tempFilters, setTempFilters] = useState<SearchParams>({});
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<Array<{ display_name: string; address?: string; lat?: number; lng?: number }>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -44,7 +44,11 @@ export default function SearchScreen() {
     if (q.length < 2) { setSuggestions([]); return; }
     try {
       const { data } = await searchApi.autocomplete(q);
-      setSuggestions(Array.isArray(data) ? data.slice(0, 6) : []);
+      const items = Array.isArray(data) ? data.slice(0, 6) : [];
+      // API returns either strings or objects with display_name
+      setSuggestions(items.map((item: any) =>
+        typeof item === 'string' ? { display_name: item } : item
+      ));
       setShowSuggestions(true);
     } catch { setSuggestions([]); }
   }, []);
@@ -89,7 +93,7 @@ export default function SearchScreen() {
             selectionColor={Colors.accentGreen}
           />
           {query.length > 0 && (
-            <TouchableOpacity onPress={() => { setQuery(''); setActiveQuery(''); setSuggestions([]); }}>
+            <TouchableOpacity onPress={() => { setQuery(''); setActiveQuery(''); setSuggestions([]); setShowSuggestions(false); }}>
               <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
             </TouchableOpacity>
           )}
@@ -112,10 +116,10 @@ export default function SearchScreen() {
             <TouchableOpacity
               key={i}
               style={styles.suggestionItem}
-              onPress={() => { setQuery(s); handleSearch(s); }}
+              onPress={() => { setQuery(s.display_name); handleSearch(s.display_name); }}
             >
               <Ionicons name="location-outline" size={13} color={Colors.textMuted} />
-              <Text style={styles.suggestionText}>{s}</Text>
+              <Text style={styles.suggestionText}>{s.display_name}</Text>
             </TouchableOpacity>
           ))}
         </View>
