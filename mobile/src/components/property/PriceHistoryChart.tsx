@@ -1,12 +1,11 @@
 import React from 'react';
-import { View, Text, Dimensions, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import { HudCard } from '../ui/HudCard';
 import { Colors, Fonts, Spacing } from '../../theme';
 import type { PriceEvent } from '../../types';
 
-const YAXIS_WIDTH = 40;
-const W = Dimensions.get('window').width - 64 - YAXIS_WIDTH;
+const YAXIS_WIDTH = 35;
 
 function fmtPrice(n: number) {
   return n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : `$${Math.round(n / 1000)}K`;
@@ -15,6 +14,10 @@ function fmtPrice(n: number) {
 interface Props { events: PriceEvent[] }
 
 export function PriceHistoryChart({ events }: Props) {
+  const { width: screenWidth } = useWindowDimensions();
+  // panels padding (16*2) + card padding (16*2) + yAxisWidth consumed outside chart area
+  const chartWidth = screenWidth - 64 - YAXIS_WIDTH;
+
   if (!events || events.length === 0) {
     return (
       <HudCard label="PRICE HISTORY" glow="cyan">
@@ -27,14 +30,14 @@ export function PriceHistoryChart({ events }: Props) {
   const data = sorted.map((e) => ({
     value: e.price,
     label: e.event_date.slice(0, 7),
-    dataPointText: fmtPrice(e.price),
   }));
 
   return (
     <HudCard label="PRICE HISTORY" glow="cyan">
+      <View style={styles.chartClip}>
       <LineChart
         data={data}
-        width={W}
+        width={chartWidth}
         yAxisWidth={YAXIS_WIDTH}
         height={160}
         color={Colors.accentCyan}
@@ -54,7 +57,10 @@ export function PriceHistoryChart({ events }: Props) {
         hideRules
         curved
         showVerticalLines={false}
+        initialSpacing={8}
+        endSpacing={8}
       />
+      </View>
 
       {/* Event list */}
       <View style={styles.events}>
@@ -74,6 +80,7 @@ export function PriceHistoryChart({ events }: Props) {
 }
 
 const styles = StyleSheet.create({
+  chartClip: { overflow: 'hidden' },
   empty: { fontFamily: Fonts.mono, fontSize: 12, color: Colors.textMuted, textAlign: 'center', paddingVertical: 20 },
   events: { marginTop: Spacing.lg, gap: Spacing.sm },
   eventRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },

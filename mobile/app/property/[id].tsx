@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  useProperty, useAVM, useSaveProperty, useUnsaveProperty,
+  useProperty, useAVM, useDealScore, useSaveProperty, useUnsaveProperty,
   useSavedProperties, useUsage,
 } from '../../src/lib/hooks/useProperty';
 import { useAuthStore } from '../../src/lib/store/authStore';
@@ -39,9 +39,11 @@ export default function PropertyDetailScreen() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   const [photoIndex, setPhotoIndex] = useState(0);
+  const [photoError, setPhotoError] = useState(false);
 
   const { data: detail, isLoading, error } = useProperty(id);
   const { data: avm } = useAVM(id);
+  const { data: dealScoreData } = useDealScore(id);
   const { data: usage } = useUsage();
   const { data: saved } = useSavedProperties();
   const { mutate: saveProperty } = useSaveProperty();
@@ -92,6 +94,7 @@ export default function PropertyDetailScreen() {
   }
 
   const { property, price_history, tax_history, neighborhood, market, deal_score } = detail;
+  const activeScore = dealScoreData ?? deal_score;
   const isLand = property.property_type?.toLowerCase() === 'land';
   const photos = property.photo_urls ?? [];
 
@@ -125,9 +128,14 @@ export default function PropertyDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* Photo carousel */}
         <View style={styles.photoWrap}>
-          {photos.length > 0 ? (
+          {photos.length > 0 && !photoError ? (
             <>
-              <Image source={{ uri: photos[photoIndex] }} style={styles.photo} contentFit="cover" />
+              <Image
+                source={{ uri: photos[photoIndex] }}
+                style={styles.photo}
+                contentFit="cover"
+                onError={() => setPhotoError(true)}
+              />
               {photos.length > 1 && (
                 <>
                   <TouchableOpacity
@@ -150,7 +158,8 @@ export default function PropertyDetailScreen() {
             </>
           ) : (
             <View style={[styles.photo, styles.photoPlaceholder]}>
-              <Ionicons name="home-outline" size={48} color={Colors.textMuted} />
+              <Ionicons name="image-outline" size={48} color={Colors.textSecondary} />
+              <Text style={styles.photoPlaceholderText}>NO PHOTO AVAILABLE</Text>
             </View>
           )}
         </View>
@@ -235,7 +244,7 @@ export default function PropertyDetailScreen() {
 
         {/* Panels */}
         <View style={styles.panels}>
-          {deal_score && <DealScorePanel dealScore={deal_score} />}
+          {activeScore && <DealScorePanel dealScore={activeScore} />}
           <PriceHistoryChart events={price_history ?? []} />
           <CompsPanel propertyId={id} isLand={isLand} />
           <CrimePanel neighborhood={neighborhood} />
@@ -270,7 +279,8 @@ const styles = StyleSheet.create({
   },
   photoWrap: { width: W, height: W * 0.6, backgroundColor: Colors.bgSecondary },
   photo: { width: W, height: W * 0.6 },
-  photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  photoPlaceholder: { alignItems: 'center', justifyContent: 'center', gap: 8 },
+  photoPlaceholderText: { fontFamily: Fonts.mono, fontSize: 10, color: Colors.textSecondary, letterSpacing: 2 },
   photoNav: {
     position: 'absolute',
     top: '50%',
