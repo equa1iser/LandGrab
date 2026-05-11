@@ -22,9 +22,14 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Hooks must be called unconditionally — use placeholder when not configured
+  // so the hook doesn't throw. Button is hidden when clientId is absent.
+  const googleClientId = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || null;
+  const placeholder = 'not-configured';
   const [_request, response, promptAsync] = Google.useAuthRequest({
-    clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-    redirectUri: 'landgrab://auth/login',
+    iosClientId: googleClientId ?? placeholder,
+    androidClientId: googleClientId ?? placeholder,
+    webClientId: googleClientId ?? placeholder,
   });
 
   // Handle Google sign-in response
@@ -116,16 +121,20 @@ export default function LoginScreen() {
                 : <Text style={styles.btnPrimaryText}>SIGN IN</Text>}
             </TouchableOpacity>
 
-            {/* Divider */}
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
-              <View style={styles.dividerLine} />
-            </View>
+            {googleClientId && (
+              <>
+                {/* Divider */}
+                <View style={styles.divider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OR</Text>
+                  <View style={styles.dividerLine} />
+                </View>
 
-            <TouchableOpacity style={styles.btnGoogle} onPress={() => promptAsync()} disabled={loading}>
-              <Text style={styles.btnGoogleText}>CONTINUE WITH GOOGLE</Text>
-            </TouchableOpacity>
+                <TouchableOpacity style={styles.btnGoogle} onPress={() => promptAsync()} disabled={loading}>
+                  <Text style={styles.btnGoogleText}>CONTINUE WITH GOOGLE</Text>
+                </TouchableOpacity>
+              </>
+            )}
 
             <View style={styles.footer}>
               <Text style={styles.footerText}>Don't have an account? </Text>
