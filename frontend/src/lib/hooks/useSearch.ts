@@ -15,6 +15,29 @@ export function useSearch(query: string, filters?: FilterValues) {
     params.zip_code = query.trim();
   } else if (isAddress) {
     params.address = query;
+    // Extract trailing "City, ST" so the backend can filter by city+state.
+    // Without this the DB query has no WHERE clause and returns all cached rows.
+    const stateMatch = query.match(/,?\s+([A-Z]{2})\s*$/);
+    if (stateMatch) {
+      const state = stateMatch[1];
+      const withoutState = query.slice(0, query.lastIndexOf(stateMatch[0])).trim();
+      // Walk backwards through the words; stop at digits or common street suffixes.
+      const STREET_TOKENS = new Set([
+        "rd", "st", "ave", "blvd", "dr", "ln", "ct", "pl",
+        "way", "hwy", "pkwy", "rte", "route", "cir", "ter",
+      ]);
+      const words = withoutState.replace(/[,.]/g, "").split(/\s+/);
+      const cityWords: string[] = [];
+      for (let i = words.length - 1; i >= 0; i--) {
+        const w = words[i].toLowerCase();
+        if (/^\d/.test(w) || STREET_TOKENS.has(w)) break;
+        cityWords.unshift(words[i]);
+      }
+      if (cityWords.length > 0) {
+        params.city = cityWords.join(" ");
+        params.state = state;
+      }
+    }
   } else if (query) {
     const parts = query.trim().split(/\s+/);
     if (parts.length >= 2 && parts[parts.length - 1].length === 2) {
