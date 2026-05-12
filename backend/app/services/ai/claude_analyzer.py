@@ -20,7 +20,7 @@ You MUST respond with valid JSON only, no other text. Use this exact schema:
   "verdict": <"STRONG BUY"|"BUY"|"NEUTRAL"|"AVOID"|"STRONG AVOID">,
   "summary": "<2-3 sentence narrative>",
   "key_factors": [
-    {"factor": "<name>", "impact": <"positive"|"negative"|"neutral">, "detail": "<brief explanation>"}
+    {"factor": "<name>", "impact": <"positive"|"negative"|"neutral">, "description": "<brief explanation>"}
   ],
   "risks": ["<risk 1>", "<risk 2>"],
   "opportunities": ["<opp 1>", "<opp 2>"]

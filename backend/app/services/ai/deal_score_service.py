@@ -120,7 +120,12 @@ class DealScoreService:
             grade = claude_result.get("grade", self.engine.score_to_grade(final_score))
             verdict = claude_result.get("verdict")
             ai_analysis = claude_result.get("summary")
-            key_factors = claude_result.get("key_factors", [])
+            raw_factors = claude_result.get("key_factors", [])
+            # Normalize: AI historically returned 'detail', schema expects 'description'
+            key_factors = [
+                {**f, "description": f.get("description") or f.get("detail", "")}
+                for f in raw_factors
+            ]
             risks = claude_result.get("risks", [])
             opportunities = claude_result.get("opportunities", [])
         else:

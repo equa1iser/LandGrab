@@ -82,6 +82,8 @@ class DealScoreSummary(BaseModel):
     ai_analysis: Optional[str] = None
     score_components: Optional[dict] = None
     key_factors: Optional[list] = None
+    risks: Optional[list] = None
+    opportunities: Optional[list] = None
 
     model_config = {"from_attributes": True}
 
