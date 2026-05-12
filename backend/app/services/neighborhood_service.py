@@ -17,9 +17,9 @@ class NeighborhoodService:
             select(NeighborhoodData).where(
                 NeighborhoodData.geo_key == zip_code,
                 NeighborhoodData.geo_type == GeoType.zip,
-            )
+            ).order_by(NeighborhoodData.fetched_at.desc()).limit(1)
         )
-        record = result.scalar_one_or_none()
+        record = result.scalars().first()
 
         if record and record.expires_at and record.expires_at > datetime.utcnow():
             return self._to_dict(record)

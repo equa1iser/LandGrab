@@ -15,8 +15,9 @@ class MarketService:
     async def get_or_fetch(self, zip_code: str, city: str = None, state: str = None) -> Optional[dict]:
         result = await self.db.execute(
             select(MarketData).where(MarketData.geo_key == zip_code)
+            .order_by(MarketData.fetched_at.desc()).limit(1)
         )
-        record = result.scalar_one_or_none()
+        record = result.scalars().first()
 
         if record and record.expires_at and record.expires_at > datetime.utcnow():
             return self._to_dict(record)

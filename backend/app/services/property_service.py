@@ -120,6 +120,28 @@ class PropertyService:
         if market and not isinstance(market, Exception) and isinstance(market, dict):
             m_data = MarketSummary.model_validate(market)
 
+        # Fetch the latest valid deal score for this property
+        score_result = await self.db.execute(
+            select(DealScore)
+            .where(DealScore.property_id == prop.id, DealScore.expires_at > datetime.utcnow())
+            .order_by(DealScore.created_at.desc())
+            .limit(1)
+        )
+        score_row = score_result.scalars().first()
+        ds_data = None
+        if score_row:
+            from app.schemas.property import DealScoreSummary
+            ds_data = DealScoreSummary(
+                score=score_row.score,
+                grade=score_row.grade,
+                verdict=score_row.verdict,
+                ai_analysis=score_row.ai_analysis,
+                score_components=score_row.score_components,
+                key_factors=score_row.key_factors,
+                risks=score_row.risks,
+                opportunities=score_row.opportunities,
+            )
+
         from app.schemas.property import PriceEvent, TaxRecord
         return PropertyDetailResponse(
             property=PropertyBase.model_validate(prop),
@@ -127,6 +149,7 @@ class PropertyService:
             tax_history=[TaxRecord.model_validate(th) for th in prop.tax_history],
             neighborhood=n_data,
             market=m_data,
+            deal_score=ds_data,
         )
 
     async def _persist_history(
