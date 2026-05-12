@@ -34,7 +34,7 @@ interface ViewportInfo {
   zoom: number;
 }
 
-const ZOOM_THRESHOLD_MILES = 20;
+const ZOOM_THRESHOLD_MILES = Number(process.env.NEXT_PUBLIC_MAP_BBOX_MILES ?? 40);
 const DEBOUNCE_MS = 600;
 
 export default function MapPage() {
