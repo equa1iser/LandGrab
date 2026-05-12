@@ -22,6 +22,8 @@ function pushHistory(query: string) {
 
 interface Suggestion {
   display_name: string;
+  city?: string;
+  state_abbr?: string;
 }
 
 interface SearchBarProps {
@@ -144,16 +146,23 @@ export function SearchBar({ initialValue = "", compact = false }: SearchBarProps
               <div className="px-3 py-1.5 border-b border-border-subtle/50">
                 <span className="font-mono text-xs text-text-muted uppercase tracking-wider">Suggestions</span>
               </div>
-              {suggestions.map((s, i) => (
-                <button
-                  key={i}
-                  onMouseDown={() => { setQuery(s.display_name); navigate(s.display_name); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-bg-secondary transition-colors"
-                >
-                  <MapPin className="w-3.5 h-3.5 text-accent-cyan flex-shrink-0" />
-                  <span className="font-mono text-sm text-text-secondary truncate">{s.display_name}</span>
-                </button>
-              ))}
+              {suggestions.map((s, i) => {
+                // Prefer structured "City ST" format so useSearch parses it correctly.
+                // Fall back to raw display_name if the geocoder didn't return city/state.
+                const searchQuery = s.city && s.state_abbr
+                  ? `${s.city} ${s.state_abbr}`
+                  : s.display_name;
+                return (
+                  <button
+                    key={i}
+                    onMouseDown={() => { setQuery(s.display_name); navigate(searchQuery); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-bg-secondary transition-colors"
+                  >
+                    <MapPin className="w-3.5 h-3.5 text-accent-cyan flex-shrink-0" />
+                    <span className="font-mono text-sm text-text-secondary truncate">{s.display_name}</span>
+                  </button>
+                );
+              })}
             </>
           )}
           {showHistory && (
