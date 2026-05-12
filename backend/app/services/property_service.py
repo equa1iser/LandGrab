@@ -10,6 +10,7 @@ from app.models.property import Property, PriceHistory, TaxHistory, PriceEventTy
 from app.models.deal_score import DealScore
 from app.schemas.property import PropertyDetailResponse, PropertySummaryResponse, PropertyBase
 from app.services.data_sources.registry import get_registry
+from app.services.data_sources.http_client import create_client
 from app.services.neighborhood_service import NeighborhoodService
 from app.services.market_service import MarketService
 from app.core.redis_client import DB_SEARCH_FRESHNESS, DB_ADDRESS_FRESHNESS
@@ -205,6 +206,27 @@ class PropertyService:
 
         await self.db.commit()
 
+    async def _reverse_geocode(self, lat: float, lng: float) -> tuple[str, str]:
+        """Nominatim reverse geocode → (city, state_abbr). Returns ('', '') on failure."""
+        try:
+            async with create_client("https://nominatim.openstreetmap.org", timeout=6.0) as client:
+                resp = await client.get(
+                    "/reverse",
+                    params={"lat": lat, "lon": lng, "format": "json", "addressdetails": 1},
+                    headers={"User-Agent": "LandGrab/1.0 (landgrab.io)"},
+                )
+                resp.raise_for_status()
+                addr = resp.json().get("address", {})
+                city = (
+                    addr.get("city") or addr.get("town") or
+                    addr.get("village") or addr.get("municipality") or ""
+                )
+                iso = addr.get("ISO3166-2-lvl4", "")
+                state = iso.split("-")[-1] if "-" in iso else ""
+                return city, state
+        except Exception:
+            return "", ""
+
     async def search(
         self,
         address=None, city=None, state=None, zip_code=None,
@@ -212,30 +234,52 @@ class PropertyService:
         property_type=None, limit=20,
         lat_min=None, lat_max=None, lng_min=None, lng_max=None,
     ) -> list[PropertySummaryResponse]:
-        # Bbox path: query DB directly, no external fetch (quota-safe)
+        # Bbox path: try DB first; if empty, reverse-geocode center and fetch externally.
         if lat_min is not None and lat_max is not None and lng_min is not None and lng_max is not None:
-            bbox_query = (
-                select(Property)
-                .where(
-                    Property.lat.isnot(None),
-                    Property.lng.isnot(None),
-                    Property.lat >= lat_min,
-                    Property.lat <= lat_max,
-                    Property.lng >= lng_min,
-                    Property.lng <= lng_max,
+            def _bbox_query():
+                q = (
+                    select(Property)
+                    .where(
+                        Property.lat.isnot(None),
+                        Property.lng.isnot(None),
+                        Property.lat >= lat_min,
+                        Property.lat <= lat_max,
+                        Property.lng >= lng_min,
+                        Property.lng <= lng_max,
+                    )
                 )
-            )
-            if min_price:
-                bbox_query = bbox_query.where(Property.current_price >= min_price)
-            if max_price:
-                bbox_query = bbox_query.where(Property.current_price <= max_price)
-            if beds:
-                bbox_query = bbox_query.where(Property.beds >= beds)
-            if property_type:
-                bbox_query = bbox_query.where(Property.property_type == property_type)
-            bbox_query = bbox_query.limit(min(limit, 100))
-            result = await self.db.execute(bbox_query)
+                if min_price:
+                    q = q.where(Property.current_price >= min_price)
+                if max_price:
+                    q = q.where(Property.current_price <= max_price)
+                if beds:
+                    q = q.where(Property.beds >= beds)
+                if property_type:
+                    q = q.where(Property.property_type == property_type)
+                return q.limit(min(limit, 100))
+
+            result = await self.db.execute(_bbox_query())
             props = list(result.scalars().all())
+
+            if not props:
+                # No cached properties in this viewport — reverse-geocode the center
+                # and do a normal city/state fetch to populate the cache.
+                center_lat = (lat_min + lat_max) / 2
+                center_lng = (lng_min + lng_max) / 2
+                geo_city, geo_state = await self._reverse_geocode(center_lat, center_lng)
+                if geo_city and geo_state:
+                    raw_results = await self.registry.search_properties(
+                        city=geo_city, state=geo_state, limit=limit,
+                        min_price=min_price, max_price=max_price,
+                        beds=beds, property_type=property_type,
+                    )
+                    for data in raw_results:
+                        await self._upsert_property(data)
+                    if raw_results:
+                        # Re-query so only properties inside the viewport are returned.
+                        result = await self.db.execute(_bbox_query())
+                        props = list(result.scalars().all())
+
             score_map = await self._batch_scores([p.id for p in props])
             return [self._to_summary(p, score_map.get(p.id)) for p in props]
 
