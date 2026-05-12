@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store/authStore";
 import Link from "next/link";
 import { Heart, Trash2, MapPin, ExternalLink, Bed, Bath, Square } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 
 interface SavedProperty {
   id: string;
@@ -24,8 +27,10 @@ interface SavedProperty {
 }
 
 export default function FavoritesPage() {
+  const router = useRouter();
   const { isAuthenticated } = useAuthStore();
   const queryClient = useQueryClient();
+  const [navigatingId, setNavigatingId] = useState<string | null>(null);
 
   const { data: saved = [], isLoading } = useQuery<SavedProperty[]>({
     queryKey: ["saved-properties"],
@@ -57,8 +62,8 @@ export default function FavoritesPage() {
 
   if (isLoading) {
     return (
-      <div className="mt-14 max-w-7xl mx-auto px-6 py-24 text-center font-mono text-text-muted text-sm">
-        <span className="animate-blink">█</span>&nbsp;LOADING WATCHLIST...
+      <div className="mt-14 max-w-7xl mx-auto px-6 py-24 flex justify-center">
+        <Spinner size="lg" color="green" label="Loading watchlist..." />
       </div>
     );
   }
@@ -162,12 +167,14 @@ export default function FavoritesPage() {
                     </div>
                   )}
                 </div>
-                <Link
-                  href={`/property/${prop.property_id}`}
+                <button
+                  onClick={() => { setNavigatingId(prop.property_id); router.push(`/property/${prop.property_id}`); }}
                   className="flex items-center gap-1 text-xs font-mono text-text-muted hover:text-accent-cyan transition-colors"
                 >
-                  <ExternalLink className="w-3 h-3" /> View
-                </Link>
+                  {navigatingId === prop.property_id
+                    ? <Spinner size="sm" color="cyan" />
+                    : <><ExternalLink className="w-3 h-3" /> View</>}
+                </button>
               </div>
 
               {/* Notes */}

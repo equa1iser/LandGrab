@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useComps } from "@/lib/hooks/useProperty";
 import { HudCard } from "@/components/ui/HudCard";
+import { Spinner } from "@/components/ui/Spinner";
 import { MapPin, Calendar, Ruler } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { clsx } from "clsx";
@@ -66,9 +67,9 @@ export function CompsPanel({ propertyId, subjectPrice, propertyType, subjectLotA
     return (
       <HudCard label={panelLabel} className="p-6 pt-10">
         {header}
-        <p className="text-text-muted font-mono text-sm text-center py-6 animate-pulse">
-          Scanning comparables...
-        </p>
+        <div className="flex justify-center py-8">
+          <Spinner size="md" color="green" label="Scanning comparables..." />
+        </div>
       </HudCard>
     );
   }

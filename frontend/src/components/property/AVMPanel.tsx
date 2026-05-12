@@ -2,6 +2,7 @@
 
 import { HudCard } from "@/components/ui/HudCard";
 import { useAVM } from "@/lib/hooks/useProperty";
+import { Spinner } from "@/components/ui/Spinner";
 import { clsx } from "clsx";
 
 interface AVMPanelProps {
@@ -15,8 +16,8 @@ export function AVMPanel({ propertyId, listPrice }: AVMPanelProps) {
   if (isLoading) {
     return (
       <HudCard label="LANDGRAB ESTIMATE" className="p-6 pt-10">
-        <div className="font-mono text-text-muted text-sm text-center py-4 animate-pulse">
-          Computing valuation...
+        <div className="flex justify-center py-8">
+          <Spinner size="md" color="cyan" label="Computing valuation..." />
         </div>
       </HudCard>
     );

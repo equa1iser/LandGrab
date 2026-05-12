@@ -1,6 +1,10 @@
-import Link from "next/link";
-import { Bed, Bath, Square, MapPin, TrendingUp } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Bed, Bath, Square, MapPin } from "lucide-react";
 import { clsx } from "clsx";
+import { Spinner } from "@/components/ui/Spinner";
 
 interface Property {
   id: string;
@@ -34,17 +38,32 @@ function ScoreBadge({ score }: { score?: number }) {
 }
 
 export function PropertyList({ properties }: { properties: Property[] }) {
+  const router = useRouter();
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  const handleClick = (id: string) => {
+    setLoadingId(id);
+    router.push(`/property/${id}`);
+  };
+
   return (
     <div className="space-y-2">
       <div className="font-mono text-xs text-text-muted uppercase tracking-wider mb-4">
         {properties.length} properties found
       </div>
       {properties.map((prop) => (
-        <Link
+        <button
           key={prop.id}
-          href={`/property/${prop.id}`}
-          className="block hud-card p-4 hover:border-accent-green/30 transition-all duration-200 group"
+          onClick={() => handleClick(prop.id)}
+          className="w-full text-left hud-card p-4 hover:border-accent-green/30 transition-all duration-200 group relative overflow-hidden"
         >
+          {/* Loading overlay */}
+          {loadingId === prop.id && (
+            <div className="absolute inset-0 bg-bg-card/85 flex items-center justify-center z-10 backdrop-blur-[1px]">
+              <Spinner size="sm" color="green" />
+            </div>
+          )}
+
           <div className="flex items-start justify-between gap-3 mb-2">
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-text-primary text-sm truncate group-hover:text-accent-green transition-colors">
@@ -90,7 +109,7 @@ export function PropertyList({ properties }: { properties: Property[] }) {
                 : `${prop.days_on_market}d on market`}
             </div>
           )}
-        </Link>
+        </button>
       ))}
     </div>
   );

@@ -16,6 +16,7 @@ import { InterestRatesPanel } from "./InterestRatesPanel";
 import { DealScorePanel } from "./DealScorePanel";
 import { AVMPanel } from "./AVMPanel";
 import { ProGate } from "@/components/ui/ProGate";
+import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api-client";
 import {
   Bed, Bath, Square, MapPin, Calendar, Layers,
@@ -269,8 +270,8 @@ export function PropertyDetailClient({ propertyId }: PropertyDetailClientProps) 
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64 font-mono text-text-muted">
-        <span className="animate-blink">█</span>&nbsp;LOADING INTELLIGENCE...
+      <div className="flex items-center justify-center h-64">
+        <Spinner size="lg" color="green" label="Loading intelligence..." />
       </div>
     );
   }

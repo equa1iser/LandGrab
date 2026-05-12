@@ -8,6 +8,7 @@ import { FilterPanel, type FilterValues } from "@/components/search/FilterPanel"
 import { PropertyMap } from "@/components/map/PropertyMap";
 import { useSearch } from "@/lib/hooks/useSearch";
 import { useAuthStore } from "@/lib/store/authStore";
+import { Spinner } from "@/components/ui/Spinner";
 
 const DEFAULT_FILTERS: FilterValues = {
   minPrice: "",
@@ -46,8 +47,8 @@ function SearchContent() {
         <div className="w-[420px] flex-shrink-0 overflow-y-auto border-r border-border-subtle bg-bg-primary">
           <div className="p-4">
             {searchLoading ? (
-              <div className="font-mono text-text-muted text-sm py-8 text-center">
-                <span className="animate-blink">█</span> SCANNING...
+              <div className="flex justify-center py-12">
+                <Spinner size="md" color="green" label="Scanning..." />
               </div>
             ) : properties.length === 0 ? (
               <div className="font-mono text-text-muted text-sm py-8 text-center">
