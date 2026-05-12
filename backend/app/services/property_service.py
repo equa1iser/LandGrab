@@ -210,7 +210,35 @@ class PropertyService:
         address=None, city=None, state=None, zip_code=None,
         min_price=None, max_price=None, beds=None, baths=None,
         property_type=None, limit=20,
+        lat_min=None, lat_max=None, lng_min=None, lng_max=None,
     ) -> list[PropertySummaryResponse]:
+        # Bbox path: query DB directly, no external fetch (quota-safe)
+        if lat_min is not None and lat_max is not None and lng_min is not None and lng_max is not None:
+            bbox_query = (
+                select(Property)
+                .where(
+                    Property.lat.isnot(None),
+                    Property.lng.isnot(None),
+                    Property.lat >= lat_min,
+                    Property.lat <= lat_max,
+                    Property.lng >= lng_min,
+                    Property.lng <= lng_max,
+                )
+            )
+            if min_price:
+                bbox_query = bbox_query.where(Property.current_price >= min_price)
+            if max_price:
+                bbox_query = bbox_query.where(Property.current_price <= max_price)
+            if beds:
+                bbox_query = bbox_query.where(Property.beds >= beds)
+            if property_type:
+                bbox_query = bbox_query.where(Property.property_type == property_type)
+            bbox_query = bbox_query.limit(min(limit, 100))
+            result = await self.db.execute(bbox_query)
+            props = list(result.scalars().all())
+            score_map = await self._batch_scores([p.id for p in props])
+            return [self._to_summary(p, score_map.get(p.id)) for p in props]
+
         query = select(Property)
         if zip_code:
             query = query.where(Property.zip_code == zip_code)

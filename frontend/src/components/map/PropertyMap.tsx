@@ -17,9 +17,25 @@ interface Property {
   property_type?: string;
 }
 
+interface BboxParams {
+  lat_min: number;
+  lat_max: number;
+  lng_min: number;
+  lng_max: number;
+}
+
+interface ViewportInfo {
+  bbox: BboxParams;
+  widthMiles: number;
+  zoom: number;
+}
+
 interface PropertyMapProps {
   properties: Property[];
   onPropertySelect?: (id: string) => void;
+  onViewportChange?: (info: ViewportInfo) => void;
+  isLoading?: boolean;
+  disableAutoFit?: boolean;
 }
 
 const LAND_GREEN = "#2e7d32";
@@ -32,13 +48,23 @@ function markerColor(prop: Property): string {
   return "#ef4444";
 }
 
-export function PropertyMap({ properties, onPropertySelect }: PropertyMapProps) {
+export function PropertyMap({
+  properties,
+  onPropertySelect,
+  onViewportChange,
+  isLoading = false,
+  disableAutoFit = false,
+}: PropertyMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
+  const onViewportChangeRef = useRef(onViewportChange);
   const [mapToken, setMapToken] = useState<string | null>(null);
   const [mapError, setMapError] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+
+  // Keep callback ref current without re-running map setup effect
+  useEffect(() => { onViewportChangeRef.current = onViewportChange; }, [onViewportChange]);
 
   useEffect(() => {
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -70,6 +96,25 @@ export function PropertyMap({ properties, onPropertySelect }: PropertyMapProps) 
 
       mapRef.current = map;
       map.on("load", () => setMapReady(true));
+
+      const emitViewport = () => {
+        if (!onViewportChangeRef.current) return;
+        const bounds = map.getBounds();
+        if (!bounds) return;
+        const sw = bounds.getSouthWest();
+        const ne = bounds.getNorthEast();
+        const centerLat = (sw.lat + ne.lat) / 2;
+        // cos(lat) corrects longitude degrees to true distance
+        const widthKm = (ne.lng - sw.lng) * Math.cos((centerLat * Math.PI) / 180) * 111.32;
+        const widthMiles = widthKm * 0.621371;
+        onViewportChangeRef.current({
+          bbox: { lat_min: sw.lat, lat_max: ne.lat, lng_min: sw.lng, lng_max: ne.lng },
+          widthMiles,
+          zoom: map.getZoom(),
+        });
+      };
+
+      map.on("moveend", emitViewport);
     });
 
     return () => {
@@ -144,21 +189,23 @@ export function PropertyMap({ properties, onPropertySelect }: PropertyMapProps) 
         markersRef.current.push(marker);
       });
 
-      // Fit bounds
-      if (validProperties.length > 1) {
-        const bounds = validProperties.reduce(
-          (b, p) => b.extend([p.lng!, p.lat!]),
-          new mapboxgl.default.LngLatBounds(
-            [validProperties[0].lng!, validProperties[0].lat!],
-            [validProperties[0].lng!, validProperties[0].lat!]
-          )
-        );
-        mapRef.current.fitBounds(bounds, { padding: 60, maxZoom: 14 });
-      } else if (validProperties.length === 1) {
-        mapRef.current.flyTo({
-          center: [validProperties[0].lng!, validProperties[0].lat!],
-          zoom: 13,
-        });
+      // Fit bounds (skip when parent is controlling the viewport, e.g. bbox map mode)
+      if (!disableAutoFit) {
+        if (validProperties.length > 1) {
+          const bounds = validProperties.reduce(
+            (b, p) => b.extend([p.lng!, p.lat!]),
+            new mapboxgl.default.LngLatBounds(
+              [validProperties[0].lng!, validProperties[0].lat!],
+              [validProperties[0].lng!, validProperties[0].lat!]
+            )
+          );
+          mapRef.current.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+        } else if (validProperties.length === 1) {
+          mapRef.current.flyTo({
+            center: [validProperties[0].lng!, validProperties[0].lat!],
+            zoom: 13,
+          });
+        }
       }
     });
   }, [properties, onPropertySelect, mapReady]);

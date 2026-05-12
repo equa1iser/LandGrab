@@ -26,6 +26,10 @@ async def search_properties(
     baths: Optional[float] = Query(None),
     property_type: Optional[str] = Query(None),
     limit: int = Query(20, le=100),
+    lat_min: Optional[float] = Query(None),
+    lat_max: Optional[float] = Query(None),
+    lng_min: Optional[float] = Query(None),
+    lng_max: Optional[float] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     service = PropertyService(db)
@@ -33,6 +37,7 @@ async def search_properties(
         address=address, city=city, state=state, zip_code=zip_code,
         min_price=min_price, max_price=max_price, beds=beds, baths=baths,
         property_type=property_type, limit=limit,
+        lat_min=lat_min, lat_max=lat_max, lng_min=lng_min, lng_max=lng_max,
     )
 
 

@@ -42,6 +42,9 @@ export const api = {
   searchProperties: (params: Record<string, unknown>) =>
     apiClient.get("/properties", { params }).then((r) => r.data),
 
+  searchByBbox: (bbox: { lat_min: number; lat_max: number; lng_min: number; lng_max: number }, limit = 100) =>
+    apiClient.get("/properties", { params: { ...bbox, limit } }).then((r) => r.data),
+
   autocomplete: (q: string) =>
     apiClient.get("/search/autocomplete", { params: { q } }).then((r) => r.data),
 
