@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Users, Building2, Key, TrendingUp, ShieldCheck, ShieldOff,
-  CheckCircle2, XCircle, ChevronLeft, ChevronRight, RotateCcw,
+  CheckCircle2, XCircle, ChevronLeft, ChevronRight, RotateCcw, Settings,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { useAuthStore } from "@/lib/store/authStore";
@@ -104,6 +104,10 @@ export default function AdminPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [loadingOverview, setLoadingOverview] = useState(true);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [bboxMiles, setBboxMiles] = useState<number>(40);
+  const [bboxInput, setBboxInput] = useState<string>("40");
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
 
   // Guard: redirect non-admins (wait for isInitialized before checking)
   useEffect(() => {
@@ -139,6 +143,31 @@ export default function AdminPage() {
   useEffect(() => {
     if (isInitialized && user?.is_admin) loadUsers(page);
   }, [isInitialized, user, page, loadUsers]);
+
+  useEffect(() => {
+    if (!isInitialized || !user?.is_admin) return;
+    api.getSettings().then((s) => {
+      if (s?.map_bbox_miles) {
+        setBboxMiles(s.map_bbox_miles);
+        setBboxInput(String(s.map_bbox_miles));
+      }
+    }).catch(() => {});
+  }, [isInitialized, user]);
+
+  async function handleSaveSettings() {
+    const val = parseInt(bboxInput, 10);
+    if (isNaN(val) || val < 5 || val > 500) return;
+    setSavingSettings(true);
+    setSettingsSaved(false);
+    try {
+      await api.updateSettings({ map_bbox_miles: val });
+      setBboxMiles(val);
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 2500);
+    } finally {
+      setSavingSettings(false);
+    }
+  }
 
   async function handleUpdate(userId: string, patch: { tier?: string; is_active?: boolean; is_admin?: boolean }) {
     setUpdatingId(userId);
@@ -256,6 +285,51 @@ export default function AdminPage() {
             </div>
           </>
         )}
+
+        {/* Platform Settings */}
+        <div className="hud-card p-5 space-y-5">
+          <div className="flex items-center gap-2">
+            <Settings className="w-4 h-4 text-text-muted/50" />
+            <span className="font-mono text-xs text-text-muted uppercase tracking-widest">Platform Settings</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Map bbox threshold */}
+            <div className="space-y-3">
+              <div>
+                <div className="font-mono text-xs text-text-primary mb-0.5">Map Auto-load Radius</div>
+                <div className="font-mono text-[10px] text-text-muted">
+                  Viewport width (miles) below which map auto-loads properties. Current: {bboxMiles} mi
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min={5}
+                  max={500}
+                  value={bboxInput}
+                  onChange={(e) => setBboxInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSaveSettings()}
+                  className="w-24 bg-bg-tertiary border border-border-subtle px-3 py-1.5 font-mono text-sm
+                    text-text-primary focus:outline-none focus:border-accent-cyan/50 transition-colors"
+                />
+                <span className="font-mono text-xs text-text-muted">miles</span>
+                <button
+                  onClick={handleSaveSettings}
+                  disabled={savingSettings}
+                  className={clsx(
+                    "px-4 py-1.5 font-mono text-xs border transition-colors",
+                    settingsSaved
+                      ? "border-accent-green/50 text-accent-green bg-accent-green/10"
+                      : "border-accent-cyan/40 text-accent-cyan hover:bg-accent-cyan/10 disabled:opacity-40"
+                  )}
+                >
+                  {settingsSaved ? "Saved ✓" : savingSettings ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* User management */}
         <div className="hud-card">

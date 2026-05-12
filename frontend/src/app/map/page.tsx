@@ -34,8 +34,8 @@ interface ViewportInfo {
   zoom: number;
 }
 
-const ZOOM_THRESHOLD_MILES = Number(process.env.NEXT_PUBLIC_MAP_BBOX_MILES ?? 40);
 const DEBOUNCE_MS = 600;
+const ENV_DEFAULT_MILES = Number(process.env.NEXT_PUBLIC_MAP_BBOX_MILES ?? 40);
 
 export default function MapPage() {
   const router = useRouter();
@@ -43,18 +43,26 @@ export default function MapPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [viewportInfo, setViewportInfo] = useState<ViewportInfo | null>(null);
+  const [thresholdMiles, setThresholdMiles] = useState(ENV_DEFAULT_MILES);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (isInitialized && !isAuthenticated) router.replace("/auth/login");
   }, [isInitialized, isAuthenticated, router]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    api.getSettings().then((s) => {
+      if (s?.map_bbox_miles) setThresholdMiles(s.map_bbox_miles);
+    }).catch(() => { /* keep env default on error */ });
+  }, [isAuthenticated]);
+
   const handleViewportChange = useCallback((info: ViewportInfo) => {
     setViewportInfo(info);
 
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
-    if (info.widthMiles > ZOOM_THRESHOLD_MILES) {
+    if (info.widthMiles > thresholdMiles) {
       setProperties([]);
       return;
     }
@@ -70,11 +78,11 @@ export default function MapPage() {
         setIsLoading(false);
       }
     }, DEBOUNCE_MS);
-  }, []);
+  }, [thresholdMiles]);
 
   if (!isInitialized || !isAuthenticated) return null;
 
-  const tooZoomedOut = viewportInfo && viewportInfo.widthMiles > ZOOM_THRESHOLD_MILES;
+  const tooZoomedOut = viewportInfo && viewportInfo.widthMiles > thresholdMiles;
   const propCount = properties.length;
 
   return (

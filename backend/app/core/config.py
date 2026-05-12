@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     # Monetization
     FREE_TIER_VIEW_LIMIT: int = 5
 
+    # Map
+    MAP_BBOX_MILES: int = 40  # viewport width threshold below which properties auto-load
+
     # App
     APP_NAME: str = "LandGrab"
     VERSION: str = "1.0.0"

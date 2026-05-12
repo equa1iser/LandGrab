@@ -124,6 +124,13 @@ export const api = {
   getUsage: () =>
     apiClient.get("/users/usage").then((r) => r.data),
 
+  // App settings
+  getSettings: () =>
+    apiClient.get("/settings").then((r) => r.data),
+
+  updateSettings: (data: { map_bbox_miles: number }) =>
+    apiClient.put("/settings", data).then((r) => r.data),
+
   // Admin
   getAdminOverview: () =>
     apiClient.get("/admin/overview").then((r) => r.data),
