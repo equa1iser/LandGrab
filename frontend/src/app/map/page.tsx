@@ -35,7 +35,7 @@ interface ViewportInfo {
 }
 
 const DEBOUNCE_MS = 600;
-const ENV_DEFAULT_MILES = Number(process.env.NEXT_PUBLIC_MAP_BBOX_MILES ?? 40);
+const DEFAULT_BBOX_MILES = 40;
 
 export default function MapPage() {
   const router = useRouter();
@@ -43,7 +43,7 @@ export default function MapPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [viewportInfo, setViewportInfo] = useState<ViewportInfo | null>(null);
-  const [thresholdMiles, setThresholdMiles] = useState(ENV_DEFAULT_MILES);
+  const [thresholdMiles, setThresholdMiles] = useState(DEFAULT_BBOX_MILES);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {

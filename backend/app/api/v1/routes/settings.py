@@ -5,7 +5,6 @@ from typing import Annotated
 from app.api.v1.deps import get_current_user, get_admin_user
 from app.models.user import User
 from app.core.redis_client import cache_get, get_redis
-from app.core.config import settings
 import json
 
 router = APIRouter()
@@ -24,7 +23,7 @@ async def _load() -> AppSettings:
     stored = await cache_get(SETTINGS_KEY)
     if stored and isinstance(stored, dict):
         return AppSettings(**{k: v for k, v in stored.items() if k in AppSettings.model_fields})
-    return AppSettings(map_bbox_miles=settings.MAP_BBOX_MILES)
+    return AppSettings()
 
 
 @router.get("", response_model=AppSettings)
