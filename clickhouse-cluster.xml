@@ -1,0 +1,18 @@
+<clickhouse>
+  <remote_servers>
+    <cluster>
+      <shard>
+        <internal_replication>true</internal_replication>
+        <replica>
+          <host>clickhouse</host>
+          <port>9000</port>
+        </replica>
+      </shard>
+    </cluster>
+  </remote_servers>
+  <macros>
+    <shard>01</shard>
+    <replica>01</replica>
+    <cluster>cluster</cluster>
+  </macros>
+</clickhouse>

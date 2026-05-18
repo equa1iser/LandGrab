@@ -29,8 +29,13 @@ All other keys are optional and adapters degrade gracefully without them.
 
 ## 2. Start the Stack
 
+**With full observability (SigNoz dashboard):**
 ```bash
-# Make sure Docker Desktop is running first, then:
+docker compose -f docker-compose.yml -f docker-compose.signoz.yml up --build
+```
+
+**Without observability:**
+```bash
 docker compose up --build
 ```
 
@@ -40,8 +45,11 @@ This starts:
 | Frontend (Next.js) | http://localhost:3000 |
 | Backend API (FastAPI) | http://localhost:8000 |
 | API Docs (Swagger) | http://localhost:8000/docs |
+| SigNoz Dashboard | http://localhost:3301 (observability only) |
 | PostgreSQL | localhost:5432 |
 | Redis | localhost:6379 |
+
+> SigNoz takes ~60 seconds to initialize on first boot. If the dashboard shows a blank page, wait and refresh.
 
 ## 3. Run Database Migrations
 

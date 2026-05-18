@@ -44,6 +44,7 @@
 | Charts | Recharts |
 | State | Zustand + TanStack Query |
 | Auth | JWT (email/password) + Google OAuth (GIS) |
+| Observability | OpenTelemetry + SigNoz (traces, metrics, logs) |
 | Infra | Docker + Docker Compose |
 
 ---
@@ -102,6 +103,12 @@ All keys are optional — adapters degrade gracefully when missing.
 
 ### 2. Start the Stack
 
+**With observability (recommended):**
+```bash
+docker compose -f docker-compose.yml -f docker-compose.signoz.yml up -d --build
+```
+
+**Without observability:**
 ```bash
 docker compose up -d --build
 ```
@@ -111,8 +118,11 @@ docker compose up -d --build
 | Frontend (Next.js) | http://localhost:3000 |
 | Backend API (FastAPI) | http://localhost:8000 |
 | API Docs (Swagger) | http://localhost:8000/docs |
+| SigNoz Dashboard | http://localhost:3301 (with observability only) |
 | PostgreSQL | localhost:5432 |
 | Redis | localhost:6379 |
+
+> SigNoz takes ~60 seconds to initialize on first boot (ClickHouse startup). Refresh http://localhost:3301 if it shows a blank page.
 
 ### 3. Run Migrations
 
@@ -251,6 +261,8 @@ LandGrab/
 │   ├── vitest.config.ts
 │   └── package.json
 ├── docker-compose.yml
+├── docker-compose.signoz.yml         # SigNoz observability stack (merge to enable)
+├── otel-collector-config.yaml        # OpenTelemetry Collector config (ClickHouse exporters)
 ├── .env.example
 ├── .env                              # Never committed
 └── CLAUDE.md
@@ -441,6 +453,30 @@ docker compose exec backend python scripts/train_avm.py
 
 ---
 
+## Observability
+
+LandGrab ships with full OpenTelemetry instrumentation, visualized in a self-hosted [SigNoz](https://signoz.io/) instance.
+
+### What's instrumented
+
+| Signal | Coverage |
+|---|---|
+| **Traces** | Every HTTP request (FastAPI), every SQL query (SQLAlchemy), every Redis command, every outbound HTTP call (all data source adapters via httpx), every Celery task — all with parent→child linking |
+| **Metrics** | `landgrab.cache.hits/misses` (Redis), `landgrab.deal_score.duration_ms` (AI computation time), `landgrab.rentcast.api_calls` (quota tracking), standard FastAPI request metrics |
+| **Logs** | Structured Python logs, correlated with trace IDs, forwarded to SigNoz Logs via OTLP |
+
+### Starting with SigNoz
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.signoz.yml up -d --build
+```
+
+Open **http://localhost:3301** — navigate to Services to see `landgrab-backend`, `landgrab-frontend`, and `landgrab-worker`.
+
+Telemetry is **disabled by default** when running without the signoz compose file — no latency penalty.
+
+---
+
 ## Roadmap
 
 - [x] Phase 1 — Docker infrastructure + database schema
@@ -451,8 +487,9 @@ docker compose exec backend python scripts/train_avm.py
 - [x] Phase 6 — Auth + saved properties + email alerts + profile page
 - [x] Phase 7 — AVM model training (GradientBoosting, synthetic data pipeline)
 - [x] Phase 8 — Google OAuth + free tier + admin dashboard + land-aware property detail
-- [ ] Phase 9 — Mobile app (React Native)
-- [ ] Phase 10 — ATTOM full integration (paid data tier)
+- [x] Phase 9 — Full-stack observability (SigNoz: traces, metrics, logs via OpenTelemetry)
+- [ ] Phase 10 — Mobile app (React Native)
+- [ ] Phase 11 — ATTOM full integration (paid data tier)
 
 ---
 
