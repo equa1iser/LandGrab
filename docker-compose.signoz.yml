@@ -24,12 +24,13 @@ services:
     image: signoz/query-service:0.49.1
     container_name: signoz-query-service
     environment:
-      - ClickHouseUrl=tcp://clickhouse:9000/?database=signoz_metrics
+      - ClickHouseUrl=tcp://clickhouse:9000/
       - STORAGE=clickhouse
       - GODEBUG=netdns=go
       - SIGNOZ_LOCAL_DB_PATH=/var/lib/signoz/signoz.db
       - ALERTMANAGER_API_PREFIX=http://alertmanager:9093/api/
       - SIGNOZ_TELEMETRY_ENABLED=false
+      - SIGNOZ_JWT_SECRET=landgrab-signoz-jwt-secret-change-in-prod
     volumes:
       - signoz_sqlite:/var/lib/signoz/
     depends_on:
