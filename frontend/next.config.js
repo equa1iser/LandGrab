@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: { instrumentationHook: true },
   output: "standalone",
   images: {
     domains: ["photos.zillowstatic.com", "ssl.cdn-redfin.com"],

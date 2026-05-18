@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     # Monetization
     FREE_TIER_VIEW_LIMIT: int = 5
 
+    # Observability
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
+    OTEL_SERVICE_NAME: str = "landgrab-backend"
 
     # App
     APP_NAME: str = "LandGrab"

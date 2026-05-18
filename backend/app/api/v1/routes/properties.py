@@ -1,6 +1,9 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Optional
+
+logger = logging.getLogger(__name__)
 
 from app.core.database import get_db
 from app.api.v1.deps import get_current_user
@@ -52,13 +55,12 @@ async def get_property(
     if not result:
         raise HTTPException(status_code=404, detail="Property not found")
 
-    # Track view for quota (fire-and-forget; errors silently ignored)
     try:
         from app.services.usage_service import track_view
         is_pro = current_user.tier == UserTier.pro
         await track_view(str(current_user.id), property_id, is_pro)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("track_view failed", extra={"property_id": property_id, "error": str(exc)})
 
     return result
 

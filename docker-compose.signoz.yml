@@ -1,0 +1,112 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.1.2-alpine
+    container_name: signoz-clickhouse
+    hostname: clickhouse
+    volumes:
+      - signoz_clickhouse:/var/lib/clickhouse/
+    networks:
+      - signoz
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    restart: unless-stopped
+
+  query-service:
+    image: signoz/query-service:0.49.1
+    container_name: signoz-query-service
+    environment:
+      - ClickHouseUrl=tcp://clickhouse:9000/?database=signoz_metrics
+      - STORAGE=clickhouse
+      - GODEBUG=netdns=go
+      - SIGNOZ_LOCAL_DB_PATH=/var/lib/signoz/signoz.db
+      - ALERTMANAGER_API_PREFIX=http://alertmanager:9093/api/
+      - SIGNOZ_TELEMETRY_ENABLED=false
+    volumes:
+      - signoz_sqlite:/var/lib/signoz/
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - signoz
+    restart: unless-stopped
+
+  alertmanager:
+    image: signoz/alertmanager:0.23.7
+    container_name: signoz-alertmanager
+    environment:
+      - SIGNOZ_ALERTMANAGER_API_PREFIX=http://query-service:8080/api/
+    depends_on:
+      - query-service
+    networks:
+      - signoz
+    restart: unless-stopped
+
+  signoz-frontend:
+    image: signoz/frontend:0.49.1
+    container_name: signoz-frontend
+    ports:
+      - "3301:3301"
+    depends_on:
+      - query-service
+    networks:
+      - signoz
+    restart: unless-stopped
+
+  otel-collector:
+    image: signoz/signoz-otel-collector:0.102.9
+    container_name: signoz-otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    environment:
+      - ClickHouseUrl=tcp://clickhouse:9000/
+      - DOCKER_MULTI_NODE_CLUSTER=false
+      - LOW_CARDINAL_EXCEPTION_GROUPING=false
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - signoz
+      - default
+    restart: unless-stopped
+
+  # Env var overrides for LandGrab services — only active when this file is merged
+  backend:
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=landgrab-backend
+      - OTEL_PYTHON_LOG_CORRELATION=true
+
+  celery_worker:
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=landgrab-worker
+      - OTEL_PYTHON_LOG_CORRELATION=true
+
+  celery_beat:
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=landgrab-worker-beat
+      - OTEL_PYTHON_LOG_CORRELATION=true
+
+  frontend:
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+
+networks:
+  signoz:
+    driver: bridge
+
+volumes:
+  signoz_clickhouse:
+  signoz_sqlite:

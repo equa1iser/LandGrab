@@ -1,7 +1,10 @@
 import json
+import logging
 from typing import Optional
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are LandGrab AI, a tactical real estate analysis system built to help buyers make informed decisions.
 Your role is to analyze property data and produce a concise, data-driven assessment of whether a property is a good deal.
@@ -152,6 +155,7 @@ async def _analyze_with_groq(property_briefing: str) -> Optional[dict]:
             text = text.split("```")[1].lstrip("json").strip()
         return json.loads(text)
     except Exception:
+        logger.exception("Groq analysis failed, falling back")
         return None
 
 
@@ -179,4 +183,5 @@ async def _analyze_with_anthropic(property_briefing: str) -> Optional[dict]:
         text = response.content[0].text.strip()
         return json.loads(text)
     except Exception:
+        logger.exception("Anthropic analysis failed, falling back")
         return None

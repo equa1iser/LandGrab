@@ -7,19 +7,21 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.core.redis_client import close_redis
+from app.core.telemetry import setup_telemetry, get_logger
 from app.api.v1.router import api_router
 
 limiter = Limiter(key_func=get_remote_address)
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: initialize data source registry
     from app.services.data_sources.registry import initialize_registry
     await initialize_registry()
+    logger.info("LandGrab startup complete")
     yield
-    # Shutdown: close connections
     await close_redis()
+    logger.info("LandGrab shutdown")
 
 
 app = FastAPI(
@@ -29,6 +31,8 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+setup_telemetry(app)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

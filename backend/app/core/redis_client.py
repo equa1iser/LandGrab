@@ -3,6 +3,7 @@ from datetime import timedelta
 from typing import Any, Optional
 import redis.asyncio as aioredis
 from app.core.config import settings
+from app.core.telemetry import get_cache_hit_counter, get_cache_miss_counter
 
 # Cache TTL constants (seconds)
 PROPERTY_TTL     = 48 * 3600  # 48 hours — individual property records
@@ -34,8 +35,15 @@ async def get_redis() -> aioredis.Redis:
 async def cache_get(key: str) -> Optional[Any]:
     redis = await get_redis()
     value = await redis.get(key)
+    key_prefix = key.split(":")[0]
     if value is None:
+        counter = get_cache_miss_counter()
+        if counter is not None:
+            counter.add(1, {"key_prefix": key_prefix})
         return None
+    counter = get_cache_hit_counter()
+    if counter is not None:
+        counter.add(1, {"key_prefix": key_prefix})
     return json.loads(value)
 
 

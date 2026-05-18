@@ -1,9 +1,11 @@
+import time
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+from app.core.telemetry import get_deal_score_histogram
 
 from app.models.deal_score import DealScore
 from app.models.property import Property
@@ -35,6 +37,8 @@ class DealScoreService:
         score = result.scalar_one_or_none()
         if score and score.expires_at and score.expires_at > datetime.utcnow():
             return self._to_dict(score)
+
+        _t0 = time.perf_counter()
 
         # Load property
         prop_result = await self.db.execute(
@@ -136,6 +140,13 @@ class DealScoreService:
             key_factors = []
             risks = []
             opportunities = []
+
+        histogram = get_deal_score_histogram()
+        if histogram is not None:
+            histogram.record(
+                int((time.perf_counter() - _t0) * 1000),
+                {"has_ai": str(claude_result is not None).lower()},
+            )
 
         # Persist
         new_score = DealScore(
