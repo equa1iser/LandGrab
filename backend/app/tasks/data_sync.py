@@ -1,6 +1,6 @@
 import io
 import csv
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.tasks.celery_app import app
 
 
@@ -58,7 +58,6 @@ def sync_redfin_weekly(self):
                     record.months_of_supply = safe_float(row.get("months_of_supply"))
                     record.yoy_price_change_pct = safe_float(row.get("median_sale_price_yoy"))
                     record.fetched_at = datetime.utcnow()
-                    from datetime import timedelta
                     record.expires_at = datetime.utcnow() + timedelta(days=7)
 
                     count += 1

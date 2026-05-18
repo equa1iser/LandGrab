@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 _cache_hit_counter = None
 _cache_miss_counter = None

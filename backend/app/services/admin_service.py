@@ -12,7 +12,6 @@ from app.schemas.user import (
     AdminUserItem, AdminUserUpdate,
 )
 from app.core.redis_client import cache_get
-from datetime import datetime as _dt
 from app.core.config import settings
 
 RENTCAST_MONTHLY_QUOTA = 50
@@ -94,7 +93,7 @@ class AdminService:
         )
         users = result.scalars().all()
 
-        ym = _dt.utcnow().strftime("%Y-%m")
+        ym = datetime.utcnow().strftime("%Y-%m")
         items = []
         for u in users:
             views_raw = await cache_get(f"user:view_count:{u.id}:{ym}")
