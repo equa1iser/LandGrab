@@ -1,5 +1,8 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { SpanKind } from '@opentelemetry/api';
+import { getTracer, injectTraceContext, SpanStatusCode } from './telemetry';
+import type { Span } from './telemetry';
 
 // In dev, point to your machine's local IP (not localhost — device can't reach it)
 // Change this to your computer's LAN IP when testing on a physical device
@@ -11,10 +14,31 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+const activeSpans = new WeakMap<InternalAxiosRequestConfig, Span>();
+
 // Attach access token to every request
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   const token = await SecureStore.getItemAsync('access_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+// OTel: start a span per request and inject traceparent header
+api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const method = (config.method ?? 'GET').toUpperCase();
+  const urlPath = config.url ?? 'unknown';
+  const span = getTracer().startSpan(`${method} ${urlPath}`, {
+    kind: SpanKind.CLIENT,
+    attributes: {
+      'http.method': method,
+      'url.path': urlPath,
+      'server.address': config.baseURL ?? '',
+    },
+  });
+  activeSpans.set(config, span);
+  const carrier: Record<string, string> = {};
+  injectTraceContext(span, carrier);
+  Object.assign(config.headers, carrier);
   return config;
 });
 
@@ -28,9 +52,33 @@ const processQueue = (error: unknown, token: string | null) => {
 
 // On 401: try refresh once, then clear auth and signal logout
 api.interceptors.response.use(
-  (r) => r,
+  (response) => {
+    const span = activeSpans.get(response.config as InternalAxiosRequestConfig);
+    if (span) {
+      span.setAttributes({ 'http.status_code': response.status });
+      span.setStatus({ code: SpanStatusCode.OK });
+      span.end();
+      activeSpans.delete(response.config as InternalAxiosRequestConfig);
+    }
+    return response;
+  },
   async (error: AxiosError) => {
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    // End the span for non-retried failures
+    if (original && !original._retry) {
+      const span = activeSpans.get(original);
+      if (span) {
+        span.setAttributes({
+          'http.status_code': error.response?.status ?? 0,
+          'error.message': error.message,
+        });
+        span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+        span.end();
+        activeSpans.delete(original);
+      }
+    }
+
     if (error.response?.status === 401 && !original._retry) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => failedQueue.push({ resolve, reject }))
