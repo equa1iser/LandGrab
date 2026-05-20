@@ -1,13 +1,71 @@
 import { trace, propagation, ROOT_CONTEXT } from '@opentelemetry/api';
-import type { Tracer, Span } from '@opentelemetry/api';
+import type { Tracer, Span, SpanExporter, ExportResult } from '@opentelemetry/api';
 import { BasicTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import { ExportResultCode } from '@opentelemetry/core';
 import { Resource } from '@opentelemetry/resources';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
+// JsonTraceSerializer is a transitive dep of exporter-trace-otlp-http
+// eslint-disable-next-line import/no-extraneous-dependencies
+import { JsonTraceSerializer } from '@opentelemetry/otlp-transformer';
 
 export type { Span } from '@opentelemetry/api';
 export { SpanStatusCode } from '@opentelemetry/api';
+
+// React Native's Blob polyfill does not support Uint8Array as a constructor
+// argument, so the stock OTLPTraceExporter (which calls xhr.send(new Blob([data])))
+// silently fails. This exporter avoids Blob entirely: it decodes the JSON bytes to
+// a plain string and POSTs via fetch, which works correctly in React Native / Hermes.
+class RNOTLPExporter implements SpanExporter {
+  private readonly url: string;
+  private readonly timeoutMs: number;
+  private _shutdown = false;
+
+  constructor(url: string, timeoutMs = 5000) {
+    this.url = url;
+    this.timeoutMs = timeoutMs;
+  }
+
+  export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
+    if (this._shutdown) {
+      resultCallback({ code: ExportResultCode.FAILED });
+      return;
+    }
+
+    const request = JsonTraceSerializer.serializeRequest(spans);
+    if (!request) {
+      resultCallback({ code: ExportResultCode.FAILED });
+      return;
+    }
+
+    // Decode Uint8Array → string (the JSON serializer outputs UTF-8 encoded JSON)
+    const body = new TextDecoder().decode(request);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    fetch(this.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      signal: controller.signal,
+    })
+      .then(() => {
+        resultCallback({ code: ExportResultCode.SUCCESS });
+      })
+      .catch((err: Error) => {
+        if (__DEV__) console.warn('[OTel] export failed:', err.message);
+        resultCallback({ code: ExportResultCode.FAILED, error: err });
+      })
+      .finally(() => clearTimeout(timer));
+  }
+
+  shutdown(): Promise<void> {
+    this._shutdown = true;
+    return Promise.resolve();
+  }
+}
 
 let _tracer: Tracer | null = null;
 let _initialized = false;
@@ -19,6 +77,10 @@ export function initTelemetry(): void {
   const endpoint = process.env.EXPO_PUBLIC_OTEL_ENDPOINT;
   const serviceName = process.env.EXPO_PUBLIC_OTEL_SERVICE_NAME ?? 'landgrab-mobile';
 
+  if (__DEV__) {
+    console.log('[OTel] endpoint:', endpoint ?? '(unset — telemetry disabled)');
+  }
+
   if (!endpoint) {
     return;
   }
@@ -29,17 +91,17 @@ export function initTelemetry(): void {
     'device.type': 'mobile',
   });
 
-  const exporter = new OTLPTraceExporter({
-    url: `${endpoint}/v1/traces`,
-    headers: { 'Content-Type': 'application/json' },
-    timeoutMillis: 5000,
-  });
+  const exporter = new RNOTLPExporter(`${endpoint}/v1/traces`);
 
   const provider = new BasicTracerProvider({ resource });
   provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
   provider.register({ propagator: new W3CTraceContextPropagator() });
 
   _tracer = trace.getTracer(serviceName, '1.0.0');
+
+  if (__DEV__) {
+    console.log('[OTel] initialized — service:', serviceName);
+  }
 }
 
 export function getTracer(): Tracer {
