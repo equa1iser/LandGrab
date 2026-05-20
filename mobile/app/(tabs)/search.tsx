@@ -22,7 +22,7 @@ export default function SearchScreen() {
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [filters, setFilters] = useState<SearchParams>({ limit: 30 });
   const [tempFilters, setTempFilters] = useState<SearchParams>({});
-  const [suggestions, setSuggestions] = useState<Array<{ display_name: string; address?: string; lat?: number; lng?: number }>>([]);
+  const [suggestions, setSuggestions] = useState<Array<{ display_name: string; city?: string; state_abbr?: string; address?: string; lat?: number; lng?: number }>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -33,8 +33,11 @@ export default function SearchScreen() {
   const searchParams = useMemo<SearchParams>(() => {
     if (!activeQuery) return { ...filters, limit: 30 };
     const q = activeQuery.trim();
-    // Detect zip (5 digits), city, or address
     if (/^\d{5}$/.test(q)) return { ...filters, zip_code: q, limit: 30 };
+    const parts = q.split(/\s+/);
+    if (parts.length >= 2 && parts[parts.length - 1].length === 2) {
+      return { ...filters, city: parts.slice(0, -1).join(' '), state: parts[parts.length - 1].toUpperCase(), limit: 30 };
+    }
     return { ...filters, city: q, limit: 30 };
   }, [activeQuery, filters]);
 
@@ -116,7 +119,11 @@ export default function SearchScreen() {
             <TouchableOpacity
               key={i}
               style={styles.suggestionItem}
-              onPress={() => { setQuery(s.display_name); handleSearch(s.display_name); }}
+              onPress={() => {
+                const searchVal = s.city && s.state_abbr ? `${s.city} ${s.state_abbr}` : s.display_name;
+                setQuery(searchVal);
+                handleSearch(searchVal);
+              }}
             >
               <Ionicons name="location-outline" size={13} color={Colors.textMuted} />
               <Text style={styles.suggestionText}>{s.display_name}</Text>
