@@ -26,6 +26,7 @@
 - **Favorites / Watchlist** — Save properties to a watchlist. Accessible via the Watchlist nav tab (auth-gated).
 - **Profile Page** — Edit name/email, manage notification preferences, change password.
 - **Pluggable Data Sources** — All adapters implement `BaseDataSource`. Paid sources (ATTOM, GreatSchools, Walk Score) slot in with no route changes.
+- **React Native Mobile App** — Expo / React Native companion app with property search, map view, property detail, saved properties, and auth. Full OpenTelemetry tracing (navigation spans + HTTP spans with `traceparent` propagation) so mobile sessions appear as `landgrab-mobile` in SigNoz alongside backend services.
 
 ---
 
@@ -45,6 +46,7 @@
 | State | Zustand + TanStack Query |
 | Auth | JWT (email/password) + Google OAuth (GIS) |
 | Observability | OpenTelemetry + SigNoz (traces, metrics, logs) |
+| Mobile | React Native + Expo (iOS/Android) |
 | Infra | Docker + Docker Compose |
 
 ---
@@ -150,10 +152,26 @@ curl "http://localhost:8000/api/v1/properties?city=Tulsa&state=OK"
 curl http://localhost:8000/api/v1/market/rates/current
 ```
 
-### 6. Stop the Stack
+### 6. Mobile App (Optional)
+
+```bash
+cd mobile
+cp .env.example .env
+# Edit .env — set EXPO_PUBLIC_API_URL and EXPO_PUBLIC_OTEL_ENDPOINT to your machine's LAN IP
+npm install
+npx expo start
+```
+
+Scan the QR code with Expo Go (Android) or the Camera app (iOS). The app connects to the backend over your local network — use your machine's LAN IP, not `localhost`.
+
+> If you change any `EXPO_PUBLIC_*` env var, restart Expo with `npx expo start --clear` to bust the bundle cache.
+
+### 7. Stop the Stack
 
 ```bash
 docker compose down
+# or with SigNoz:
+docker compose -f docker-compose.yml -f docker-compose.signoz.yml down
 ```
 
 ---
@@ -260,8 +278,29 @@ LandGrab/
 │   ├── tailwind.config.ts
 │   ├── vitest.config.ts
 │   └── package.json
+├── mobile/
+│   ├── app/
+│   │   ├── _layout.tsx               # OTel init, navigation tracing, auth bootstrap
+│   │   ├── (tabs)/
+│   │   │   ├── search.tsx            # Property search + map toggle + filters
+│   │   │   ├── map.tsx               # Full-screen map
+│   │   │   └── profile.tsx           # Account + saved properties
+│   │   ├── property/[id].tsx         # Property detail
+│   │   └── auth/{login,register}.tsx
+│   ├── src/
+│   │   ├── components/               # PropertyCard, PropertyMapView, etc.
+│   │   ├── lib/
+│   │   │   ├── api-client.ts         # Axios + OTel request/response interceptors
+│   │   │   ├── telemetry.ts          # RNOTLPExporter, initTelemetry, navigation tracing
+│   │   │   ├── hooks/
+│   │   │   └── store/authStore.ts
+│   │   └── types/
+│   ├── .env.example
+│   ├── .env                          # Never committed
+│   └── package.json
 ├── docker-compose.yml
 ├── docker-compose.signoz.yml         # SigNoz observability stack (merge to enable)
+├── signoz-nginx.conf                 # Custom nginx for SigNoz frontend (DNS resolver fix)
 ├── otel-collector-config.yaml        # OpenTelemetry Collector config (ClickHouse exporters)
 ├── .env.example
 ├── .env                              # Never committed
@@ -471,9 +510,15 @@ LandGrab ships with full OpenTelemetry instrumentation, visualized in a self-hos
 docker compose -f docker-compose.yml -f docker-compose.signoz.yml up -d --build
 ```
 
-Open **http://localhost:3301** — navigate to Services to see `landgrab-backend`, `landgrab-frontend`, and `landgrab-worker`.
+Open **http://localhost:3301** — navigate to Services to see `landgrab-backend`, `landgrab-frontend`, `landgrab-worker`, and `landgrab-mobile` (once the mobile app connects).
 
 Telemetry is **disabled by default** when running without the signoz compose file — no latency penalty.
+
+#### SigNoz first-run notes
+
+- Allow ~60s for ClickHouse to initialize on first boot before the UI is usable.
+- Session survives container restarts because `SIGNOZ_JWT_SECRET` is set in `docker-compose.signoz.yml`.
+- The custom `signoz-nginx.conf` is volume-mounted into the SigNoz frontend container. It adds `resolver 127.0.0.11 valid=10s` so nginx re-resolves the `signoz-query-service` hostname at request time instead of caching the DNS entry at startup (which causes 404/502 errors after a `docker compose restart`).
 
 ---
 
@@ -488,7 +533,7 @@ Telemetry is **disabled by default** when running without the signoz compose fil
 - [x] Phase 7 — AVM model training (GradientBoosting, synthetic data pipeline)
 - [x] Phase 8 — Google OAuth + free tier + admin dashboard + land-aware property detail
 - [x] Phase 9 — Full-stack observability (SigNoz: traces, metrics, logs via OpenTelemetry)
-- [ ] Phase 10 — Mobile app (React Native)
+- [x] Phase 10 — Mobile app (React Native / Expo: search, map, property detail, auth, OTel tracing)
 - [ ] Phase 11 — ATTOM full integration (paid data tier)
 
 ---

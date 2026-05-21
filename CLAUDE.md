@@ -151,7 +151,7 @@ A second compose file adds the full SigNoz self-hosted stack alongside LandGrab:
 | -------------------- | ---- | ------------------------------------------------------------ |
 | `signoz-frontend`    | 3301 | SigNoz dashboard UI                                          |
 | `otel-collector`     | 4317 | OTLP gRPC ingestion from backend/celery                      |
-| `otel-collector`     | 4318 | OTLP HTTP ingestion from Next.js frontend                    |
+| `otel-collector`     | 4318 | OTLP HTTP ingestion from Next.js frontend **and mobile app** |
 | `query-service`      | —    | SigNoz API (internal)                                        |
 | `clickhouse`         | —    | ClickHouse telemetry data store (internal)                   |
 | `alertmanager`       | —    | Alert routing (internal)                                     |
@@ -170,6 +170,22 @@ docker compose up -d --build
 When the signoz compose file is merged, it injects `OTEL_EXPORTER_OTLP_ENDPOINT` into the backend, celery_worker, celery_beat, and frontend services. Without it, `OTEL_EXPORTER_OTLP_ENDPOINT` defaults to empty and telemetry is silently disabled — the app runs identically.
 
 SigNoz dashboard: **http://localhost:3301** (allow ~60s for ClickHouse to initialize on first boot).
+
+#### SigNoz known-issue fixes (already applied in docker-compose.signoz.yml / signoz-nginx.conf)
+
+**nginx DNS caching after container restarts** — When `signoz-query-service` restarts, nginx caches the old upstream IP at startup and serves 404/502 for all `/api/*` requests. Fixed in `signoz-nginx.conf`:
+```nginx
+resolver 127.0.0.11 valid=10s;
+location /api/ {
+  set $upstream http://signoz-query-service:8080;
+  proxy_pass $upstream$request_uri;
+}
+```
+The `set $upstream` variable forces nginx to re-resolve DNS at request time. Using a variable also disables nginx's auto-strip of the location prefix, so the full URI must be forwarded via `$request_uri` (not `$upstream/api/` which would double the prefix).
+
+**ClickHouseUrl `?database=` param** — The Go ClickHouse client v2 rejects `?database=signoz_metrics` as an unknown setting (code 115). Use path-based database: `ClickHouseUrl=tcp://clickhouse:9000/`.
+
+**Session invalidated on container restart** — Without a fixed JWT secret, SigNoz generates a new random key each startup, invalidating all sessions. `SIGNOZ_JWT_SECRET` is now set in `docker-compose.signoz.yml`.
 
 ### Adding or changing .env API keys
 
@@ -426,6 +442,27 @@ frontend/src/
     ├── Navbar.test.tsx
     ├── SearchBar.test.tsx
     └── RegisterPage.test.tsx
+
+mobile/
+├── app/
+│   ├── _layout.tsx                   # initTelemetry() + installGlobalErrorHandler() at module level
+│   │                                 # useNavigationTracing() hook: screen-level spans
+│   ├── (tabs)/
+│   │   ├── search.tsx                # searchParams useMemo splits "City ST" → city+state params
+│   │   ├── map.tsx
+│   │   └── profile.tsx
+│   ├── property/[id].tsx
+│   └── auth/{login,register}.tsx
+└── src/
+    ├── lib/
+    │   ├── telemetry.ts              # RNOTLPExporter (fetch-based, avoids RN Blob polyfill bug)
+    │   │                             # initTelemetry, getTracer, injectTraceContext
+    │   │                             # installGlobalErrorHandler (ErrorUtils)
+    │   │                             # No-op when EXPO_PUBLIC_OTEL_ENDPOINT is unset
+    │   └── api-client.ts             # OTel interceptors: WeakMap<config, Span>
+    │                                 # Request: startSpan CLIENT + injectTraceContext → traceparent header
+    │                                 # Response: end span OK; error: end span ERROR (skip if _retry)
+    └── components/
 ```
 
 ---
@@ -479,9 +516,23 @@ counter = meter.create_counter("landgrab.my.counter")
 counter.add(1, {"label": "value"})
 ```
 
+### Mobile OTel (React Native / Expo)
+
+Mobile instrumentation is in `mobile/src/lib/telemetry.ts`. Key constraints:
+- **HTTP only** — no gRPC in React Native; uses port 4318 (`/v1/traces` JSON)
+- **Custom `RNOTLPExporter`** — the stock `OTLPTraceExporter` browser build calls `xhr.send(new Blob([Uint8Array]))`. React Native's Blob polyfill does not accept `Uint8Array` as a constructor argument, so the body is silently empty and spans are never delivered. The custom exporter uses `fetch` + `JsonTraceSerializer.serializeRequest()` + `TextDecoder` to avoid Blob entirely.
+- **`EXPO_PUBLIC_*` env vars are baked into the bundle at build time.** Changing `mobile/.env` requires restarting Expo with `npx expo start --clear` — a normal restart serves the stale cached bundle.
+- **`SimpleSpanProcessor`** — avoids batch-timer issues on app background/foreground transitions
+- **No auto-instrumentors** — `opentelemetry-instrumentation-*` packages are Node/browser only; HTTP calls are instrumented manually via Axios interceptors in `api-client.ts`
+- **`EXPO_PUBLIC_OTEL_ENDPOINT`** must be the host machine's LAN IP, not `localhost` (the device can't reach the host's loopback)
+
+The `WeakMap<InternalAxiosRequestConfig, Span>` in `api-client.ts` threads a span from the request interceptor to the response/error interceptor using the Axios config object as the key (same reference flows through both). `WeakMap` ensures no memory leak if a request is cancelled.
+
+`injectTraceContext` injects `traceparent` into Axios request headers so backend spans appear as children of the mobile span in SigNoz's waterfall view.
+
 ### SigNoz UI navigation
 
-- **Services** — list of `landgrab-backend`, `landgrab-frontend`, `landgrab-worker`; P50/P99 latency + error rate
+- **Services** — list of `landgrab-backend`, `landgrab-frontend`, `landgrab-worker`, `landgrab-mobile`; P50/P99 latency + error rate
 - **Traces** — waterfall view of individual requests; filter by service, operation, duration
 - **Metrics** — custom metric explorer; search `landgrab.*`
 - **Logs** — full-text search over structured logs; click "View Trace" on any log line
@@ -683,6 +734,19 @@ The `ComparableSale` schema includes `lot_size_acres: Optional[float]`. The sqft
 ### AVM model path — Docker vs host
 
 `valuation_model.py` uses `MODEL_PATH = "/app/models/avm_v1.pkl"`. Inside Docker, `/app` is the volume-mounted `backend/` directory. The file must exist at `backend/models/avm_v1.pkl` on the host. If the `models/` directory does not exist, `train_avm.py` creates it. The AVM returns `{"status": "unavailable"}` when the pkl file is missing — run `train_avm.py` to fix.
+
+### Mobile search — city+state must be split before sending to backend
+
+`property_service.py` applies city filtering only when both `city` AND `state` are provided (line ~289: `elif city and state: query.where(Property.city.ilike(city), Property.state == state.upper())`). Without state, the filter is skipped and cached rows from nearby large cities are returned instead.
+
+The mobile search screen (`mobile/app/(tabs)/search.tsx`) splits "City ST" queries in the `searchParams` useMemo:
+```ts
+const parts = q.split(/\s+/);
+if (parts.length >= 2 && parts[parts.length - 1].length === 2) {
+  return { ...filters, city: parts.slice(0, -1).join(' '), state: parts[parts.length - 1].toUpperCase(), limit: 30 };
+}
+```
+Autocomplete suggestion taps also use `s.city`/`s.state_abbr` from the structured API response (not `s.display_name` which would re-introduce the bug). The web `useSearch` hook in `frontend/src/lib/hooks/useSearch.ts` uses the same splitting logic.
 
 ---
 
